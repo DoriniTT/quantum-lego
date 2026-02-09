@@ -27,7 +27,7 @@
 #   Imports:
 #     - github/gh-aw/.github/workflows/shared/reporting.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
 #
-# frontmatter-hash: b00b2ed2e0cb13b298f74ce7be921114971046bf74a7e6be40bda00874247e1e
+# frontmatter-hash: 2a66f1dc6b38cb1e5a634d0be691fd9ebfd522a046eb89ae8e3e9cbb19bfa07d
 
 name: "Code Simplifier"
 "on":
@@ -100,12 +100,21 @@ jobs:
         uses: github/gh-aw/actions/setup@15d0e133ebb103ed42485353efea00d7c8c07304 # v0.42.16
         with:
           destination: /opt/gh-aw/actions
-      - name: Checkout repository
+      - name: Checkout .github and .agents folders
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
+          sparse-checkout: |
+            .github
+            .agents
+          depth: 1
           persist-credentials: false
       - name: Create gh-aw temp directory
         run: bash /opt/gh-aw/actions/create_gh_aw_tmp_dir.sh
+      - name: Disable sparse checkout
+        run: |-
+          git sparse-checkout disable
+          git checkout
+
       - name: Configure Git credentials
         env:
           REPO_NAME: ${{ github.repository }}

@@ -14,6 +14,12 @@ timeout-minutes: 10
 
 strict: true
 
+steps:
+  - name: Disable sparse checkout
+    run: |
+      git sparse-checkout disable
+      git checkout
+
 tools:
   serena: ["python"]
   github:

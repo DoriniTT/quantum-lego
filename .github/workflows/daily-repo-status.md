@@ -18,6 +18,12 @@ permissions:
 
 network: defaults
 
+steps:
+  - name: Disable sparse checkout
+    run: |
+      git sparse-checkout disable
+      git checkout
+
 tools:
   github:
 

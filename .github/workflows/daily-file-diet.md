@@ -11,6 +11,11 @@ permissions:
 imports:
 - github/gh-aw/.github/workflows/shared/reporting.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
 - github/gh-aw/.github/workflows/shared/safe-output-app.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
+steps:
+  - name: Disable sparse checkout
+    run: |
+      git sparse-checkout disable
+      git checkout
 safe-outputs:
   create-issue:
     expires: 2d

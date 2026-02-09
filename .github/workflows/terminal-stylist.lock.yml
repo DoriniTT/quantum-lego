@@ -23,7 +23,7 @@
 #
 # Source: github/gh-aw/.github/workflows/terminal-stylist.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
 #
-# frontmatter-hash: 1a81304b43be13820b1705e7f70ed94cb50713658fea5c7553726f1b6b392510
+# frontmatter-hash: 962370adf9d5eccc71668991407ff7b89f9b676f9daab9ad0fb19b2ef6993e13
 
 name: "Terminal Stylist"
 "on":
@@ -91,12 +91,21 @@ jobs:
         uses: github/gh-aw/actions/setup@15d0e133ebb103ed42485353efea00d7c8c07304 # v0.42.16
         with:
           destination: /opt/gh-aw/actions
-      - name: Checkout repository
+      - name: Checkout .github and .agents folders
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
+          sparse-checkout: |
+            .github
+            .agents
+          depth: 1
           persist-credentials: false
       - name: Create gh-aw temp directory
         run: bash /opt/gh-aw/actions/create_gh_aw_tmp_dir.sh
+      - name: Disable sparse checkout
+        run: |-
+          git sparse-checkout disable
+          git checkout
+
       - name: Configure Git credentials
         env:
           REPO_NAME: ${{ github.repository }}

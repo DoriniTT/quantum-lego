@@ -9,6 +9,11 @@ permissions:
   issues: read
 imports:
   - shared/reporting.md
+steps:
+  - name: Disable sparse checkout
+    run: |
+      git sparse-checkout disable
+      git checkout
 tools:
   github:
     toolsets: [issues, labels]

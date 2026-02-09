@@ -24,7 +24,7 @@
 #   Imports:
 #     - shared/reporting.md
 #
-# frontmatter-hash: b3837db216110c5f0023652da85258a95e54499be1741dc18622fb44a7dc2e22
+# frontmatter-hash: a0897c6aa752faf060b530bb3e903215eb2e9baf8ae5cb38ec7ffc031ba4e601
 
 name: "Issue Triage Agent"
 "on":
@@ -93,10 +93,11 @@ jobs:
           destination: /opt/gh-aw/actions
       - name: Create gh-aw temp directory
         run: bash /opt/gh-aw/actions/create_gh_aw_tmp_dir.sh
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
+      - name: Disable sparse checkout
+        run: |-
+          git sparse-checkout disable
+          git checkout
+
       - name: Configure Git credentials
         env:
           REPO_NAME: ${{ github.repository }}
