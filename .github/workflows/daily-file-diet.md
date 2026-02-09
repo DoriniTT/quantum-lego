@@ -273,7 +273,7 @@ Your output MUST either:
 - **Use Serena for semantic analysis**: Leverage the MCP server's code understanding capabilities
 - **Be specific and actionable**: Provide concrete file split suggestions, not vague advice
 - **Include test coverage plans**: Always specify what tests should be added
-- **Consider repository patterns**: Review existing code organization in `pkg/` for consistency
+- **Consider repository patterns**: Review existing code organization for consistency
 - **Estimate effort realistically**: Large files may require significant refactoring effort
 
 ## Serena Configuration
@@ -289,4 +289,4 @@ Use Serena to:
 - Suggest logical module boundaries
 - Detect complexity hotspots
 
-Begin your analysis now. Find the largest Go source file, assess if it needs refactoring, and create an issue only if necessary.
+Begin your analysis now. Find the largest Python source file, assess if it needs refactoring, and create an issue only if necessary.
