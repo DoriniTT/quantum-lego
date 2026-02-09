@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
 
-engine: copilot
+engine: claude
 
 timeout-minutes: 10
 
