@@ -27,7 +27,7 @@
 #   Imports:
 #     - github/gh-aw/.github/workflows/shared/reporting.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
 #
-# frontmatter-hash: 9c7732389c7e18669201d998d315b49b4e9244e47a6883369661dfa6eb83d86f
+# frontmatter-hash: b00b2ed2e0cb13b298f74ce7be921114971046bf74a7e6be40bda00874247e1e
 
 name: "Code Simplifier"
 "on":
@@ -77,6 +77,8 @@ jobs:
       contents: read
       issues: read
       pull-requests: read
+    concurrency:
+      group: "gh-aw-claude-${{ github.workflow }}"
     env:
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       GH_AW_ASSETS_ALLOWED_EXTS: ""
@@ -935,6 +937,8 @@ jobs:
     if: needs.agent.outputs.output_types != '' || needs.agent.outputs.has_patch == 'true'
     runs-on: ubuntu-latest
     permissions: {}
+    concurrency:
+      group: "gh-aw-claude-${{ github.workflow }}"
     timeout-minutes: 10
     outputs:
       success: ${{ steps.parse_results.outputs.success }}
@@ -1092,6 +1096,7 @@ jobs:
       pull-requests: write
     timeout-minutes: 15
     env:
+      GH_AW_ENGINE_ID: "claude"
       GH_AW_TRACKER_ID: "code-simplifier"
       GH_AW_WORKFLOW_ID: "code-simplifier"
       GH_AW_WORKFLOW_NAME: "Code Simplifier"

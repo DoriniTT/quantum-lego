@@ -2,6 +2,7 @@
 on:
   schedule: daily
   skip-if-match: is:pr is:open in:title "[code-simplifier]"
+engine: claude
 permissions:
   contents: read
   issues: read
