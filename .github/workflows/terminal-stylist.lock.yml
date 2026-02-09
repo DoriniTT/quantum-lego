@@ -23,13 +23,10 @@
 #
 # Source: github/gh-aw/.github/workflows/terminal-stylist.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
 #
-# frontmatter-hash: 09f80ecdfc134ceaf28b86e685249550d561613212101e4996d3b97b40f1042b
+# frontmatter-hash: d17ecb6293df7ae53f12bcc414be566e1a903cd548d070a66283cac82f157779
 
 name: "Terminal Stylist"
 "on":
-  #schedule:
-  #- cron: "18 11 * * *"
-    # Friendly format: daily (scattered)
   workflow_dispatch:
 
 permissions: {}
