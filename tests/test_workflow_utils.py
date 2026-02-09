@@ -95,3 +95,43 @@ class TestBackwardCompatImports:
         from quantum_lego.core.workgraph import _validate_stages
         with pytest.raises(ValueError, match="empty"):
             _validate_stages([])
+
+    def test_quick_vasp_importable_from_workgraph(self):
+        from quantum_lego.core.workgraph import quick_vasp
+        assert callable(quick_vasp)
+
+    def test_quick_vasp_batch_importable_from_workgraph(self):
+        from quantum_lego.core.workgraph import quick_vasp_batch
+        assert callable(quick_vasp_batch)
+
+    def test_quick_vasp_sequential_importable_from_workgraph(self):
+        from quantum_lego.core.workgraph import quick_vasp_sequential
+        assert callable(quick_vasp_sequential)
+
+    def test_quick_dos_importable_from_workgraph(self):
+        from quantum_lego.core.workgraph import quick_dos
+        assert callable(quick_dos)
+
+    def test_quick_dos_batch_importable_from_workgraph(self):
+        from quantum_lego.core.workgraph import quick_dos_batch
+        assert callable(quick_dos_batch)
+
+    def test_quick_qe_importable_from_workgraph(self):
+        from quantum_lego.core.workgraph import quick_qe
+        assert callable(quick_qe)
+
+    def test_quick_qe_sequential_importable_from_workgraph(self):
+        from quantum_lego.core.workgraph import quick_qe_sequential
+        assert callable(quick_qe_sequential)
+
+    def test_quick_hubbard_u_importable_from_workgraph(self):
+        from quantum_lego.core.workgraph import quick_hubbard_u
+        assert callable(quick_hubbard_u)
+
+    def test_quick_aimd_importable_from_workgraph(self):
+        from quantum_lego.core.workgraph import quick_aimd
+        assert callable(quick_aimd)
+
+    def test_get_batch_results_from_workgraph_importable(self):
+        from quantum_lego.core.workgraph import get_batch_results_from_workgraph
+        assert callable(get_batch_results_from_workgraph)

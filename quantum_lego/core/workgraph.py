@@ -1,8 +1,11 @@
-"""WorkGraph builders for the lego module (compatibility facade).
+"""WorkGraph builders for the lego module (permanent compatibility facade).
 
 This module re-exports all workflow builder functions from their
 respective domain modules to maintain backward compatibility.
 All imports from this module continue to work as before.
+
+This facade is permanent - existing code using
+``from quantum_lego.core.workgraph import quick_vasp`` will always work.
 
 The actual implementations live in:
 - vasp_workflows.py: quick_vasp, quick_vasp_batch, quick_vasp_sequential
