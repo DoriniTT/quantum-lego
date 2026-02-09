@@ -24,7 +24,12 @@ from .tasks import (
     gather_kpoints_results,
 )
 from .slabs import generate_thickness_series
-from ..utils import deep_merge_dicts, get_vasp_parser_settings, extract_max_jobs_value
+from ..utils import (
+    deep_merge_dicts,
+    get_vasp_parser_settings,
+    extract_max_jobs_value,
+    extract_total_energy,
+)
 from ..constants import EV_PER_ANGSTROM2_TO_J_PER_M2
 
 logger = logging.getLogger(__name__)
@@ -522,29 +527,6 @@ def _get_thickness_settings():
     return get_vasp_parser_settings(add_energy=True)
 
 
-@task.calcfunction
-def extract_total_energy(misc: orm.Dict) -> orm.Float:
-    """
-    Extract total energy from VASP misc output.
-
-    Args:
-        misc: Dictionary containing energy outputs from VASP
-
-    Returns:
-        Total energy as Float
-    """
-    energy_dict = misc.get_dict()
-    if 'total_energies' in energy_dict:
-        energy_dict = energy_dict['total_energies']
-
-    for key in ('energy_extrapolated', 'energy_no_entropy', 'energy'):
-        if key in energy_dict:
-            return orm.Float(energy_dict[key])
-
-    available = ', '.join(sorted(energy_dict.keys()))
-    raise ValueError(f'Unable to find total energy. Available keys: {available}')
-
-
 @task.graph
 def relax_thickness_series(
     slabs: t.Annotated[dict[str, orm.StructureData], dynamic(orm.StructureData)],
@@ -612,7 +594,7 @@ def relax_thickness_series(
 
         relaxation = VaspTask(**vasp_inputs)
         relaxed[label] = relaxation.structure
-        energies_ns[label] = extract_total_energy(misc=relaxation.misc).result
+        energies_ns[label] = extract_total_energy(energies=relaxation.misc).result
 
     return {
         'relaxed_structures': relaxed,
@@ -967,7 +949,7 @@ def build_thickness_convergence_workgraph(
     bulk_energy_task = wg.add_task(
         extract_total_energy,
         name='bulk_energy',
-        misc=bulk_task.outputs.misc,
+        energies=bulk_task.outputs.misc,
     )
 
     # ===== SLAB GENERATION =====

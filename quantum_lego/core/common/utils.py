@@ -14,6 +14,7 @@ from typing import Union, Any, NamedTuple, Optional
 
 import numpy as np
 from aiida import orm
+from aiida_workgraph import task
 
 
 # =============================================================================
@@ -460,6 +461,7 @@ def get_metal_elements(atom_counts: dict) -> list:
     """
     return sorted(element for element in atom_counts if element != 'O')
 
+@task.calcfunction
 def extract_total_energy(energies: orm.Dict) -> orm.Float:
     """
     Extract total energy from VASP energies output.

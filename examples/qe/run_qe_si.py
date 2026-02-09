@@ -19,14 +19,13 @@ Usage:
 from aiida import orm, load_profile
 from ase.build import bulk
 
+# Import shared structure utilities
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from common_structures import create_si_structure
+
 load_profile()
-
-
-def create_si_structure():
-    """Create a simple Si diamond structure."""
-    si_ase = bulk('Si', 'diamond', a=5.43)
-    structure = orm.StructureData(ase=si_ase)
-    return structure
 
 
 def run_single_qe_calc():

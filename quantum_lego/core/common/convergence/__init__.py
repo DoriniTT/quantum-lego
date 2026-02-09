@@ -43,13 +43,13 @@ from .workgraph import (
     # Thickness convergence
     build_thickness_convergence_workgraph,
     get_thickness_convergence_results,
-    extract_total_energy,
     calculate_surface_energy,
     analyze_thickness_convergence,
     relax_thickness_series,
     compute_surface_energies,
     gather_surface_energies,
 )
+from ..utils import extract_total_energy
 from .slabs import (
     generate_thickness_series,
     extract_recommended_layers,
