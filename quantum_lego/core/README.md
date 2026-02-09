@@ -1,4 +1,4 @@
-# Quantum Lego
+# Lego Module
 
 Lightweight, incremental VASP calculation module for exploratory work.
 
@@ -16,7 +16,7 @@ Standard VASP files always retrieved:
 `INCAR`, `KPOINTS`, `POTCAR`, `POSCAR`, `CONTCAR`, `OUTCAR`, `vasprun.xml`, `OSZICAR`.
 
 ```python
-from quantum_lego import quick_vasp, get_results, get_status
+from quantum_lego.core import quick_vasp, get_results, get_status
 
 # Single calculation
 pk = quick_vasp(
@@ -242,7 +242,7 @@ For DOS calculations, `quick_dos` provides a simpler interface that handles
 the SCF → DOS chain automatically via the BandsWorkChain:
 
 ```python
-from quantum_lego import quick_dos, get_dos_results, print_dos_results
+from quantum_lego.core import quick_dos, get_dos_results, print_dos_results
 
 # Submit DOS calculation
 # Note: AiiDA-VASP requires lowercase INCAR keys
@@ -281,7 +281,7 @@ print_dos_results(pk)
 ## Fukui-Style Batch Example
 
 ```python
-from quantum_lego import quick_vasp_batch, get_batch_results_from_workgraph
+from quantum_lego.core import quick_vasp_batch, get_batch_results_from_workgraph
 
 # Run Fukui+ interpolation: 4 charge states
 delta_values = [0.0, 0.05, 0.10, 0.15]
@@ -319,7 +319,7 @@ for key, r in results.items():
 Minimal pattern:
 
 ```python
-from quantum_lego import quick_vasp_sequential
+from quantum_lego.core import quick_vasp_sequential
 
 stages = [
     {'name': 'relax_initial', 'type': 'vasp', 'structure': initial, 'incar': relax_incar, 'restart': None},
@@ -357,13 +357,12 @@ result = quick_vasp_sequential(structure=initial, stages=stages, ...)
 ## Module Structure
 
 ```
-quantum_lego/core/
+teros/core/lego/
 ├── __init__.py      # Public API exports
 ├── workgraph.py     # Main WorkGraph builders (thin dispatcher)
 ├── tasks.py         # @task.calcfunction helpers
 ├── utils.py         # Status, restart, file handling
 ├── results.py       # Result extraction (thin dispatcher)
-├── retrieve_defaults.py # Default VASP retrieve file lists
 ├── bricks/          # Stage type modules
 │   ├── __init__.py  # Brick registry + shared helpers
 │   ├── connections.py # PORTS/connection validation (pure Python)
@@ -380,15 +379,7 @@ quantum_lego/core/
 │   ├── cp2k.py      # CP2K brick
 │   ├── generate_neb_images.py # NEB image generator brick
 │   └── neb.py       # vasp.neb brick
-├── calcs/           # Custom AiiDA calculation plugins
-│   └── aimd_vasp.py # AIMD VASP with velocity injection
-└── common/          # Shared utilities
-    ├── utils.py     # deep_merge_dicts, logging, helpers
-    ├── constants.py # Physical constants
-    ├── fixed_atoms.py # Selective dynamics
-    ├── aimd/        # AIMD submodule
-    ├── convergence/ # Convergence submodule
-    └── u_calculation/ # Hubbard U submodule
+└── README.md        # This file
 ```
 
 ## Files to Retrieve

@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantum_lego"
+version = "0.1.0"
+description = "Modular building blocks for AiiDA workflows (VASP, QE, CP2K)"
+readme = "README.md"
+authors = [{ name = "Thiago Trevizam" }]
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "aiida-core>=2.0",
+    "aiida-workgraph",
+    "aiida-vasp",
+    "pymatgen",
+    "ase",
+    "numpy",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["quantum_lego*"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = [
+    "tests",
+]
