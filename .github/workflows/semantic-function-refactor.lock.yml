@@ -31,8 +31,8 @@
 
 name: "Semantic Function Refactoring"
 "on":
-  schedule:
-  - cron: "47 1 * * *"
+  #schedule:
+  #- cron: "47 1 * * *"
     # Friendly format: daily (scattered)
   workflow_dispatch:
 

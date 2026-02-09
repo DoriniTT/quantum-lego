@@ -8,7 +8,7 @@ description: |
 engine: claude
 
 on:
-  schedule: daily
+  #schedule: daily
   workflow_dispatch:
 
 permissions:

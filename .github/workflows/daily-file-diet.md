@@ -1,7 +1,7 @@
 ---
 on:
-  schedule:
-  - cron: 0 13 * * 1-5
+  #schedule:
+  #- cron: 0 13 * * 1-5
   skip-if-match: is:issue is:open in:title "[file-diet]"
   workflow_dispatch: null
 permissions:
