@@ -39,7 +39,11 @@ tools:
   - mypy --version
   - mypy quantum_lego --no-error-summary --no-pretty 2>&1 || true
   cache-memory: true
-  edit: null
+  read:
+    allowed_patterns:
+    - quantum_lego/**/*.py
+    - pyproject.toml
+    - README.md
   github:
     toolsets:
     - default
@@ -89,6 +93,11 @@ Generate a single formatted discussion summarizing all refactoring opportunities
    find quantum_lego -name "*.py" ! -name "*_test.py" ! -name "test_*.py" -type f | sort
    ```
 
+   **CRITICAL**: If this returns 0 files, something is wrong with the find command or directory structure. Verify by:
+   - Running `find . -name "*.py" -type f | head -20` to see ANY Python files
+   - Checking if the quantum_lego directory exists
+   - Reading the README.md to understand the project structure
+
 3. **Load Previous Analysis** (if available):
    Use cache-memory to check if there's a previous analysis to compare against:
    - `last_analysis_date`: When the last analysis was performed
@@ -100,11 +109,22 @@ Generate a single formatted discussion summarizing all refactoring opportunities
 Analyze type hint coverage to find missing annotations:
 
 **1. Scan Function Definitions**:
-   For each Python file:
-   - Find all function and method definitions
-   - Check for parameter type hints
-   - Check for return type annotations
-   - Identify missing annotations
+
+   **IMPORTANT**: You must READ the actual Python files to analyze them!
+
+   For each Python file discovered in Phase 0:
+   - **Read the file** using the read tool or `cat` command
+   - Find all function and method definitions in the actual code
+   - Check for parameter type hints in the actual code
+   - Check for return type annotations in the actual code
+   - Identify missing annotations in the actual code
+
+   Example of how to read files:
+   ```bash
+   cat quantum_lego/core/workflows.py
+   cat quantum_lego/core/vasp_workflows.py
+   # Read each file you discovered
+   ```
 
    Look for patterns like:
    ```python
@@ -157,12 +177,22 @@ Analyze type hint coverage to find missing annotations:
 Analyze type definitions to find duplicates:
 
 **1. Collect All Type Definitions**:
-   For each Python file:
+
+   **You must READ each Python file to extract type definitions!**
+
+   For each Python file (READ them using read tool or cat):
    - Extract class definitions (regular classes, dataclasses, NamedTuples)
    - Extract TypedDict definitions
    - Extract type aliases (e.g., `ConfigDict = Dict[str, Any]`)
    - Extract Protocol definitions
    - Record: file path, module, type name, definition
+
+   ```bash
+   # Read files to analyze type definitions
+   cat quantum_lego/core/workflows.py
+   cat quantum_lego/core/vasp_workflows.py
+   # etc.
+   ```
 
 **2. Group Similar Types**:
    Cluster types by:
