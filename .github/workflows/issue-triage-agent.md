@@ -2,6 +2,7 @@
 on:
   schedule: 0 14 * * 1-5
   workflow_dispatch: null
+engine: claude
 permissions:
   issues: read
 imports:
