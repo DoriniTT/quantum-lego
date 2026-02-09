@@ -21,6 +21,8 @@ dependencies = [
     "pymatgen",
     "ase",
     "numpy",
+    "rich>=13.0.0",
+    "questionary>=2.0.0",
 ]
 
 [tool.setuptools.packages.find]
