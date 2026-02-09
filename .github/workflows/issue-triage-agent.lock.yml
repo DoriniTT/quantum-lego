@@ -26,7 +26,7 @@
 #   Imports:
 #     - github/gh-aw/.github/workflows/shared/reporting.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
 #
-# frontmatter-hash: 7bc83974fa1e47c12b40c3333872e4126711d5c6624022cc78b76047289d8b63
+# frontmatter-hash: 133bb3fff10ed1c5cfa8d84f67d12ec67011183e0c28547559af1d82cce64ec0
 
 name: "Issue Triage Agent"
 "on":
@@ -71,6 +71,8 @@ jobs:
     permissions:
           contents: read
           issues: read
+    concurrency:
+      group: "gh-aw-claude-${{ github.workflow }}"
     env:
       DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
       GH_AW_ASSETS_ALLOWED_EXTS: ""
@@ -891,6 +893,8 @@ jobs:
     if: needs.agent.outputs.output_types != '' || needs.agent.outputs.has_patch == 'true'
     runs-on: ubuntu-latest
     permissions: {}
+    concurrency:
+      group: "gh-aw-claude-${{ github.workflow }}"
     timeout-minutes: 10
     outputs:
       success: ${{ steps.parse_results.outputs.success }}
@@ -1013,6 +1017,7 @@ jobs:
       pull-requests: write
     timeout-minutes: 15
     env:
+      GH_AW_ENGINE_ID: "claude"
       GH_AW_WORKFLOW_ID: "issue-triage-agent"
       GH_AW_WORKFLOW_NAME: "Issue Triage Agent"
       GH_AW_WORKFLOW_SOURCE: "github/gh-aw/.github/workflows/issue-triage-agent.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4"
