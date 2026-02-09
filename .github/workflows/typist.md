@@ -26,23 +26,30 @@ name: "Typist - Python Type Analysis"
 source: github/gh-aw/.github/workflows/typist.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
 strict: true
 timeout-minutes: 20
+steps:
+  - name: Disable sparse checkout
+    run: |
+      git sparse-checkout disable
+      git checkout
 tools:
   bash:
-  - find quantum_lego -name '*.py' ! -name '*_test.py' ! -name 'test_*.py' -type f
+  - "find . -name '*.py' ! -name '*_test.py' ! -name 'test_*.py' ! -path '*/.*' -type f"
   - find . -type f -name '*.py' ! -name '*_test.py' ! -name 'test_*.py'
-  - find quantum_lego/ -maxdepth 1 -ls
-  - wc -l quantum_lego/**/*.py
-  - grep -r 'class ' quantum_lego --include='*.py'
-  - grep -r 'def ' quantum_lego --include='*.py'
-  - grep -r 'Any' quantum_lego --include='*.py'
-  - cat quantum_lego/**/*.py
+  - find . -maxdepth 3 -name '*.py' -ls
+  - wc -l **/*.py
+  - grep -r 'class ' --include='*.py'
+  - grep -r 'def ' --include='*.py'
+  - grep -r 'Any' --include='*.py'
+  - cat **/*.py
   - mypy --version
   - mypy quantum_lego --no-error-summary --no-pretty 2>&1 || true
   cache-memory: true
-  edit:
+  edit: null
   github:
     toolsets:
     - default
+  serena:
+  - python
 tracker-id: typist-python-daily
 ---
 # Typist - Python Type Hint Analysis
@@ -73,11 +80,30 @@ Generate a single formatted discussion summarizing all refactoring opportunities
 4. **Use cache-memory for tracking** - Store analysis state between runs
 5. **Strong typing principle** - Prefer specific types over generic types like `Any`
 
+## Serena Configuration
+
+The Serena MCP server is configured for Python analysis with:
+- **Project Root**: ${{ github.workspace }}
+- **Language**: Python
+- **Memory**: `/tmp/gh-aw/cache-memory/serena/`
+
+Use Serena for:
+- Reading file contents (`read_file`)
+- Getting symbol overviews (`get_symbols_overview`)
+- Finding symbols across files (`find_symbol`)
+- Searching for patterns (`search_for_pattern`)
+- Finding references (`find_referencing_symbols`)
+
+**IMPORTANT**: Always activate the project first using `activate_project` with the workspace path.
+
 ## Analysis Process
 
 ### Phase 0: Setup and Discovery
 
-1. **Check mypy availability**:
+1. **Activate Serena Project**:
+   Use Serena's `activate_project` tool with the workspace path to enable semantic analysis.
+
+2. **Check mypy availability**:
    ```bash
    mypy --version
    ```
@@ -109,18 +135,11 @@ Analyze type hint coverage to find missing annotations:
    **IMPORTANT**: You must READ the actual Python files to analyze them!
 
    For each Python file discovered in Phase 0:
-   - **Read the file** using the edit tool (for reading) or `cat` command
-   - Find all function and method definitions in the actual code
+   - **Read the file** using Serena's `read_file` tool or `cat` command
+   - Use Serena's `get_symbols_overview` to extract all symbols (functions, methods, classes)
    - Check for parameter type hints in the actual code
    - Check for return type annotations in the actual code
    - Identify missing annotations in the actual code
-
-   Example of how to read files:
-   ```bash
-   cat quantum_lego/core/workflows.py
-   cat quantum_lego/core/vasp_workflows.py
-   # Read each file you discovered
-   ```
 
    Look for patterns like:
    ```python
@@ -176,19 +195,14 @@ Analyze type definitions to find duplicates:
 
    **You must READ each Python file to extract type definitions!**
 
-   For each Python file (READ them using edit tool or cat):
+   For each Python file, use Serena's tools:
+   - Use `get_symbols_overview` to get all type definitions in the file
+   - Use `read_file` to examine the full source when needed
    - Extract class definitions (regular classes, dataclasses, NamedTuples)
    - Extract TypedDict definitions
    - Extract type aliases (e.g., `ConfigDict = Dict[str, Any]`)
    - Extract Protocol definitions
    - Record: file path, module, type name, definition
-
-   ```bash
-   # Read files to analyze type definitions
-   cat quantum_lego/core/workflows.py
-   cat quantum_lego/core/vasp_workflows.py
-   # etc.
-   ```
 
 **2. Group Similar Types**:
    Cluster types by:

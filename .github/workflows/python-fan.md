@@ -27,6 +27,11 @@ name: Python Fan
 source: github/gh-aw/.github/workflows/python-fan.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
 strict: true
 timeout-minutes: 30
+steps:
+  - name: Disable sparse checkout
+    run: |
+      git sparse-checkout disable
+      git checkout
 tools:
   bash:
   - cat pyproject.toml
@@ -36,16 +41,18 @@ tools:
   - grep -r 'import' --include='*.py'
   - grep -r 'from' --include='*.py'
   - find . -name '*.py'
-  - find quantum_lego -name '*.py' -type f
-  - cat quantum_lego/**/*.py
-  - wc -l quantum_lego/**/*.py
+  - find . -name '*.py' -type f
+  - cat **/*.py
+  - wc -l **/*.py
   - find scratchpad/packages/ -maxdepth 1 -ls
   - cat scratchpad/packages/*
   cache-memory: true
-  edit:
+  edit: null
   github:
     toolsets:
     - default
+  serena:
+  - python
 tracker-id: python-fan-daily
 ---
 # Python Fan 🐍 - Daily Python Package Reviewer
@@ -71,6 +78,22 @@ You are the **Python Fan** - an enthusiastic Python package expert who performs 
 - **Repository**: ${{ github.repository }}
 - **Run ID**: ${{ github.run_id }}
 - **Python Project File**: `pyproject.toml`
+
+## Serena Configuration
+
+The Serena MCP server is configured for Python analysis with:
+- **Project Root**: ${{ github.workspace }}
+- **Language**: Python
+- **Memory**: `/tmp/gh-aw/cache-memory/serena/`
+
+Use Serena for:
+- Reading file contents (`read_file`)
+- Getting symbol overviews (`get_symbols_overview`)
+- Finding symbols across files (`find_symbol`)
+- Searching for patterns (`search_for_pattern`)
+- Finding references (`find_referencing_symbols`)
+
+**IMPORTANT**: Always activate the project first using `activate_project` with the workspace path.
 
 ## Your Mission
 
@@ -174,22 +197,24 @@ Check for:
 
 **CRITICAL**: You MUST read the actual source code files to understand the current implementation status. DO NOT make assumptions about what code exists or doesn't exist.
 
-### 4.1 Understand Current Implementation Status
+### 4.1 Activate Serena and Discover Files
 
-**FIRST**, determine what's actually implemented:
+**FIRST**, activate Serena and discover what's actually implemented:
 
-```bash
-# List all Python files to understand project structure
-find quantum_lego -name '*.py' -type f
+1. **Activate Serena project** with `activate_project` using the workspace path
+2. **Find all Python files**:
+   ```bash
+   find . -name '*.py' -type f
+   ```
+3. **Count lines of code**:
+   ```bash
+   wc -l **/*.py
+   ```
 
-# Count lines of code
-wc -l quantum_lego/**/*.py
-```
-
-**THEN**, read the README to understand the project architecture:
-- Read `README.md` to understand the project overview
-- Understand the planned vs implemented features
-- Note the project structure and design patterns
+**THEN**, use Serena to understand the project:
+- Use `read_file` to examine `README.md`
+- For each Python file found, use `get_symbols_overview` to understand what's implemented
+- Use `read_file` to read the actual source code of files that import the package
 
 ### 4.2 Find Package Usage
 
@@ -203,18 +228,11 @@ grep -r 'from' --include='*.py' | grep "<package_name>"
 
 **For each file that imports the package:**
 
-1. **Read the entire file** using the edit tool (for reading) or cat command
-2. **Understand the context**: What is this file doing?
-3. **Identify usage patterns**: How is the package actually being used?
-4. **Note the implementation details**: What APIs are called? What patterns are followed?
-
-Example files to read (based on grep results):
-```bash
-cat quantum_lego/core/workflows.py
-cat quantum_lego/core/vasp_workflows.py
-cat quantum_lego/core/workgraph.py
-# etc. - read ALL files that use the package
-```
+1. **Read the entire file** using Serena's `read_file` tool
+2. **Get symbols overview** using Serena's `get_symbols_overview` to understand the file structure
+3. **Understand the context**: What is this file doing?
+4. **Identify usage patterns**: How is the package actually being used?
+5. **Note the implementation details**: What APIs are called? What patterns are followed?
 
 ### 4.4 Analyze Implementation Quality
 
