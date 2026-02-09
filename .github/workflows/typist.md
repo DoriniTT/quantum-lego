@@ -39,11 +39,7 @@ tools:
   - mypy --version
   - mypy quantum_lego --no-error-summary --no-pretty 2>&1 || true
   cache-memory: true
-  read:
-    allowed_patterns:
-    - quantum_lego/**/*.py
-    - pyproject.toml
-    - README.md
+  edit:
   github:
     toolsets:
     - default
@@ -113,7 +109,7 @@ Analyze type hint coverage to find missing annotations:
    **IMPORTANT**: You must READ the actual Python files to analyze them!
 
    For each Python file discovered in Phase 0:
-   - **Read the file** using the read tool or `cat` command
+   - **Read the file** using the edit tool (for reading) or `cat` command
    - Find all function and method definitions in the actual code
    - Check for parameter type hints in the actual code
    - Check for return type annotations in the actual code
@@ -180,7 +176,7 @@ Analyze type definitions to find duplicates:
 
    **You must READ each Python file to extract type definitions!**
 
-   For each Python file (READ them using read tool or cat):
+   For each Python file (READ them using edit tool or cat):
    - Extract class definitions (regular classes, dataclasses, NamedTuples)
    - Extract TypedDict definitions
    - Extract type aliases (e.g., `ConfigDict = Dict[str, Any]`)

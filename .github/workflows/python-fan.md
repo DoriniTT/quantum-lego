@@ -42,11 +42,7 @@ tools:
   - find scratchpad/packages/ -maxdepth 1 -ls
   - cat scratchpad/packages/*
   cache-memory: true
-  read:
-    allowed_patterns:
-    - quantum_lego/**/*.py
-    - README.md
-    - pyproject.toml
+  edit:
   github:
     toolsets:
     - default
@@ -191,7 +187,7 @@ wc -l quantum_lego/**/*.py
 ```
 
 **THEN**, read the README to understand the project architecture:
-- Use the read tool to examine `README.md`
+- Read `README.md` to understand the project overview
 - Understand the planned vs implemented features
 - Note the project structure and design patterns
 
@@ -207,7 +203,7 @@ grep -r 'from' --include='*.py' | grep "<package_name>"
 
 **For each file that imports the package:**
 
-1. **Read the entire file** using the read tool or cat command
+1. **Read the entire file** using the edit tool (for reading) or cat command
 2. **Understand the context**: What is this file doing?
 3. **Identify usage patterns**: How is the package actually being used?
 4. **Note the implementation details**: What APIs are called? What patterns are followed?
