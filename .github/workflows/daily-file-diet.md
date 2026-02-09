@@ -21,7 +21,7 @@ safe-outputs:
     - cookie
     max: 1
     title-prefix: "[file-diet] "
-description: Analyzes the largest Go source file daily and creates an issue to refactor it into smaller files if it exceeds the healthy size threshold
+description: Analyzes the largest Python source file daily and creates an issue to refactor it into smaller files if it exceeds the healthy size threshold
 engine: copilot
 name: Daily File Diet
 source: github/gh-aw/.github/workflows/daily-file-diet.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
@@ -29,18 +29,18 @@ strict: true
 timeout-minutes: 20
 tools:
   bash:
-  - "find pkg -name '*.go' ! -name '*_test.go' -type f -exec wc -l {} \\; | sort -rn"
-  - wc -l pkg/**/*.go
-  - cat pkg/**/*.go
-  - head -n * pkg/**/*.go
-  - grep -r 'func ' pkg --include='*.go'
-  - find pkg/ -maxdepth 1 -ls
+  - "find . -name '*.py' ! -name 'test_*.py' ! -name '*_test.py' ! -path '*/.*' -type f -exec wc -l {} \\; | sort -rn"
+  - wc -l **/*.py
+  - cat **/*.py
+  - head -n * **/*.py
+  - grep -r 'def ' --include='*.py'
+  - find . -maxdepth 2 -name '*.py' -ls
   edit: null
   github:
     toolsets:
     - default
   serena:
-  - go
+  - python
 tracker-id: daily-file-diet
 ---
 {{#runtime-import? .github/shared-instructions.md}}
@@ -51,7 +51,7 @@ You are the Daily File Diet Agent - a code health specialist that monitors file 
 
 ## Mission
 
-Analyze the Go codebase daily to identify the largest source file and determine if it requires refactoring. Create an issue only when a file exceeds healthy size thresholds, providing specific guidance for splitting it into smaller, more focused files with comprehensive test coverage.
+Analyze the Python codebase daily to identify the largest source file and determine if it requires refactoring. Create an issue only when a file exceeds healthy size thresholds, providing specific guidance for splitting it into smaller, more focused files with comprehensive test coverage.
 
 ## Current Context
 
@@ -61,12 +61,12 @@ Analyze the Go codebase daily to identify the largest source file and determine 
 
 ## Analysis Process
 
-### 1. Identify the Largest Go Source File
+### 1. Identify the Largest Python Source File
 
-Use the following command to find all Go source files (excluding tests) and sort by size:
+Use the following command to find all Python source files (excluding tests) and sort by size:
 
 ```bash
-find pkg -name '*.go' ! -name '*_test.go' -type f -exec wc -l {} \; | sort -rn | head -1
+find . -name '*.py' ! -name 'test_*.py' ! -name '*_test.py' ! -path '*/.*' ! -path '*/venv/*' ! -path '*/__pycache__/*' -type f -exec wc -l {} \; | sort -rn | head -1
 ```
 
 Extract:
@@ -103,10 +103,15 @@ Use the Serena MCP server to perform semantic analysis on the large file:
 Examine existing test coverage for the large file:
 
 ```bash
-# Find corresponding test file
-TEST_FILE=$(echo "$LARGE_FILE" | sed 's/\.go$/_test.go/')
-if [ -f "$TEST_FILE" ]; then
-  wc -l "$TEST_FILE"
+# Find corresponding test file (Python test patterns: test_*.py or *_test.py)
+LARGE_FILE_BASE=$(basename "$LARGE_FILE" .py)
+LARGE_FILE_DIR=$(dirname "$LARGE_FILE")
+TEST_FILE1="${LARGE_FILE_DIR}/test_${LARGE_FILE_BASE}.py"
+TEST_FILE2="${LARGE_FILE_DIR}/${LARGE_FILE_BASE}_test.py"
+if [ -f "$TEST_FILE1" ]; then
+  wc -l "$TEST_FILE1"
+elif [ -f "$TEST_FILE2" ]; then
+  wc -l "$TEST_FILE2"
 else
   echo "No test file found"
 fi
@@ -170,45 +175,45 @@ The file `[FILE_PATH]` has grown to [LINE_COUNT] lines, making it difficult to m
 
 Based on semantic analysis, split the file into the following modules:
 
-1. **`[new_file_1].go`**
-   - Functions: [list]
+1. **`[new_file_1].py`**
+   - Functions/Classes: [list]
    - Responsibility: [description]
    - Estimated LOC: [count]
 
-2. **`[new_file_2].go`**
-   - Functions: [list]
+2. **`[new_file_2].py`**
+   - Functions/Classes: [list]
    - Responsibility: [description]
    - Estimated LOC: [count]
 
-3. **`[new_file_3].go`**
-   - Functions: [list]
+3. **`[new_file_3].py`**
+   - Functions/Classes: [list]
    - Responsibility: [description]
    - Estimated LOC: [count]
 
 #### Shared Utilities
 
 Extract common functionality into:
-- **`[utility_file].go`**: [description]
+- **`[utility_file].py`**: [description]
 
-#### Interface Abstractions
+#### Class/Protocol Abstractions
 
-Consider introducing interfaces to reduce coupling:
-- [Interface suggestions]
+Consider introducing abstract base classes or protocols to reduce coupling:
+- [ABC/Protocol suggestions]
 
 <details>
 <summary><b>Test Coverage Plan</b></summary>
 
 Add comprehensive tests for each new file:
 
-1. **`[new_file_1]_test.go`**
+1. **`test_[new_file_1].py`**
    - Test cases: [list key scenarios]
    - Target coverage: >80%
 
-2. **`[new_file_2]_test.go`**
+2. **`test_[new_file_2].py`**
    - Test cases: [list key scenarios]
    - Target coverage: >80%
 
-3. **`[new_file_3]_test.go`**
+3. **`test_[new_file_3].py`**
    - Test cases: [list key scenarios]
    - Target coverage: >80%
 
@@ -217,29 +222,29 @@ Add comprehensive tests for each new file:
 ### Implementation Guidelines
 
 1. **Preserve Behavior**: Ensure all existing functionality works identically
-2. **Maintain Exports**: Keep public API unchanged (exported functions/types)
+2. **Maintain Public API**: Keep public API unchanged (public functions/classes)
 3. **Add Tests First**: Write tests for each new file before refactoring
 4. **Incremental Changes**: Split one module at a time
-5. **Run Tests Frequently**: Verify `make test-unit` passes after each split
-6. **Update Imports**: Ensure all import paths are correct
-7. **Document Changes**: Add comments explaining module boundaries
+5. **Run Tests Frequently**: Verify `pytest` passes after each split
+6. **Update Imports**: Ensure all import statements are correct
+7. **Document Changes**: Add docstrings and comments explaining module boundaries
 
 ### Acceptance Criteria
 
 - [ ] Original file is split into [N] focused files
 - [ ] Each new file is under 500 lines
-- [ ] All tests pass (`make test-unit`)
-- [ ] Test coverage is ≥80% for new files
+- [ ] All tests pass (`pytest`)
+- [ ] Test coverage is ≥80% for new files (`pytest --cov`)
 - [ ] No breaking changes to public API
-- [ ] Code passes linting (`make lint`)
-- [ ] Build succeeds (`make build`)
+- [ ] Code passes linting (`ruff check` or `flake8`)
+- [ ] Type checking passes (`mypy`)
 
 <details>
 <summary><b>Additional Context</b></summary>
 
-- **Repository Guidelines**: Follow patterns in `.github/agents/developer.instructions.agent.md`
-- **Code Organization**: Prefer many small files grouped by functionality
-- **Testing**: Match existing test patterns in `pkg/workflow/*_test.go`
+- **Repository Guidelines**: Follow PEP 8 style guide and existing project patterns
+- **Code Organization**: Prefer many small modules grouped by functionality
+- **Testing**: Match existing test patterns (pytest conventions)
 
 </details>
 
