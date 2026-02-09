@@ -1,31 +1,21 @@
 ---
-on:
-  schedule: 0 14 * * 1-5
-  workflow_dispatch: null
+timeout-minutes: 5
+strict: true
 engine: claude
+on:
+  schedule: "0 14 * * 1-5"
+  workflow_dispatch:
 permissions:
   issues: read
 imports:
-- github/gh-aw/.github/workflows/shared/reporting.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
-safe-outputs:
-  add-comment: {}
-  add-labels:
-    allowed:
-    - bug
-    - feature
-    - enhancement
-    - documentation
-    - question
-    - help-wanted
-    - good-first-issue
-source: github/gh-aw/.github/workflows/issue-triage-agent.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
-strict: true
-timeout-minutes: 5
+  - shared/reporting.md
 tools:
   github:
-    toolsets:
-    - issues
-    - labels
+    toolsets: [issues, labels]
+safe-outputs:
+  add-labels:
+    allowed: [bug, feature, enhancement, documentation, question, help-wanted, good-first-issue]
+  add-comment: {}
 ---
 # Issue Triage Agent
 
