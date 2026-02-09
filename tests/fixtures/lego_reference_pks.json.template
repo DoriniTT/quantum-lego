@@ -1,0 +1,44 @@
+{
+    "_comment": "Template for lego reference PKs. Copy to lego_reference_pks.json and fill in PKs.",
+    "_generated_by": "python tests/generate_lego_references.py --brick <brick> --code <code_label>",
+    "vasp": {
+        "relax_si": {
+            "pk": null,
+            "code_label": null,
+            "description": "Si diamond relaxation (ISIF=3, NSW=100)"
+        },
+        "scf_sno2": {
+            "pk": null,
+            "code_label": null,
+            "description": "SnO2 rutile static SCF (NSW=0)"
+        }
+    },
+    "dos": {
+        "dos_sno2": {
+            "pk": null,
+            "code_label": null,
+            "description": "SnO2 rutile DOS calculation (SCF + DOS)"
+        }
+    },
+    "batch": {
+        "batch_si_encut": {
+            "pk": null,
+            "code_label": null,
+            "description": "Si diamond batch with 3 ENCUT values"
+        }
+    },
+    "aimd": {
+        "aimd_si": {
+            "pk": null,
+            "code_label": null,
+            "description": "Si diamond short AIMD (10 steps)"
+        }
+    },
+    "sequential": {
+        "relax_then_scf_si": {
+            "pk": null,
+            "code_label": null,
+            "description": "Si diamond relax -> SCF sequential pipeline"
+        }
+    }
+}
