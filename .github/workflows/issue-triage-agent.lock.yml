@@ -24,12 +24,10 @@
 #   Imports:
 #     - shared/reporting.md
 #
-# frontmatter-hash: a0897c6aa752faf060b530bb3e903215eb2e9baf8ae5cb38ec7ffc031ba4e601
+# frontmatter-hash: 12d3e8c18f3feb456fddf4b11bbf58748959a75bf807db606cb4e90efd62ed65
 
 name: "Issue Triage Agent"
 "on":
-  #schedule:
-  #- cron: "0 14 * * 1-5"
   workflow_dispatch:
 
 permissions: {}
