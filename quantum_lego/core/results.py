@@ -207,36 +207,40 @@ def print_results(pk: int) -> None:
         pk: PK of the calculation
     """
     from .utils import get_status
+    from .console import (
+        console, print_calculation_header, print_status,
+        print_energy, print_structure_info, print_field, print_warning
+    )
 
     status = get_status(pk)
-    print(f"Calculation PK {pk}")
-    print(f"  Status: {status}")
+    print_calculation_header(pk, "Calculation")
+    print_status(status)
 
     if status != 'finished':
-        print("  (Calculation not finished, results may be incomplete)")
+        print_warning("Calculation not finished, results may be incomplete", indent=2)
         return
 
     results = get_results(pk)
 
     if results['energy'] is not None:
-        print(f"  Energy: {results['energy']:.6f} eV")
+        print_energy(results['energy'])
 
     if results['structure'] is not None:
         struct = results['structure']
         formula = struct.get_formula()
-        print(f"  Structure: {formula} (PK: {struct.pk})")
+        print_structure_info(formula, pk=struct.pk)
 
     if results['files'] is not None:
         files = results['files'].list_object_names()
-        print(f"  Retrieved files: {', '.join(files)}")
+        print_field("Retrieved files", ', '.join(files))
 
     if results['misc'] is not None:
         misc = results['misc']
         # Print some useful info from misc
         if 'run_status' in misc:
-            print(f"  Run status: {misc['run_status']}")
+            print_field("Run status", str(misc['run_status']))
         if 'maximum_force' in misc:
-            print(f"  Max force: {misc['maximum_force']:.4f} eV/A")
+            print_field("Max force", f"{misc['maximum_force']:.4f} eV/A")
 
 
 def get_dos_results(pk: int) -> dict:
@@ -396,69 +400,73 @@ def print_dos_results(pk: int) -> None:
         pk: PK of the quick_dos BandsWorkChain
     """
     from .utils import get_status
+    from .console import (
+        console, print_calculation_header, print_status,
+        print_energy, print_structure_info, print_field, print_warning
+    )
 
     status = get_status(pk)
-    print(f"DOS Calculation PK {pk}")
-    print(f"  Status: {status}")
+    print_calculation_header(pk, "DOS Calculation")
+    print_status(status)
 
     if status != 'finished':
-        print("  (Calculation not finished, results may be incomplete)")
+        print_warning("Calculation not finished, results may be incomplete", indent=2)
         return
 
     results = get_dos_results(pk)
 
     if results['energy'] is not None:
-        print(f"  SCF Energy: {results['energy']:.6f} eV")
+        print_energy(results['energy'], label="SCF Energy")
 
     if results['structure'] is not None:
         struct = results['structure']
         formula = struct.get_formula()
-        print(f"  Structure: {formula} (PK: {struct.pk})")
+        print_structure_info(formula, pk=struct.pk)
 
     if results['scf_misc'] is not None:
         scf_misc = results['scf_misc']
         run_status = scf_misc.get('run_status', {})
         converged = run_status.get('electronic_converged', 'N/A')
-        print(f"  SCF converged: {converged}")
+        print_field("SCF converged", str(converged))
 
     if results['scf_remote'] is not None:
-        print(f"  SCF remote_folder: PK {results['scf_remote'].pk}")
+        print_field("SCF remote_folder", f"PK {results['scf_remote'].pk}")
 
     if results['dos'] is not None:
         dos_node = results['dos']
-        print(f"  DOS ArrayData: PK {dos_node.pk}")
+        console.print(f"  [bold]DOS ArrayData:[/bold] PK [pk]{dos_node.pk}[/pk]")
         # Show available arrays in the DOS node
         if hasattr(dos_node, 'get_arraynames'):
             arrays = dos_node.get_arraynames()
-            print(f"    Arrays: {', '.join(arrays)}")
+            console.print(f"    [dim]Arrays: {', '.join(arrays)}[/dim]")
 
     if results['projectors'] is not None:
         proj_node = results['projectors']
-        print(f"  Projectors ArrayData: PK {proj_node.pk}")
+        console.print(f"  [bold]Projectors ArrayData:[/bold] PK [pk]{proj_node.pk}[/pk]")
 
     if results['dos_misc'] is not None:
         dos_misc = results['dos_misc']
         # Print some useful DOS info
         run_status = dos_misc.get('run_status', {})
         if run_status:
-            print(f"  DOS run status: {run_status}")
+            print_field("DOS run status", str(run_status))
         # Print band gap info if available
         band_props = dos_misc.get('band_properties', {})
         band_gap = band_props.get('band_gap', None)
         if band_gap is not None:
             is_direct = band_props.get('is_direct_gap', False)
             gap_type = "direct" if is_direct else "indirect"
-            print(f"  Band gap: {band_gap:.4f} eV ({gap_type})")
+            print_field("Band gap", f"{band_gap:.4f} eV ({gap_type})", value_style="energy")
         fermi = dos_misc.get('fermi_level', None)
         if fermi is not None:
-            print(f"  Fermi level: {fermi:.4f} eV")
+            print_field("Fermi level", f"{fermi:.4f} eV", value_style="energy")
 
     if results['dos_remote'] is not None:
-        print(f"  DOS remote_folder: PK {results['dos_remote'].pk}")
+        print_field("DOS remote_folder", f"PK {results['dos_remote'].pk}")
 
     if results['files'] is not None:
         files = results['files'].list_object_names()
-        print(f"  DOS retrieved files: {', '.join(files)}")
+        print_field("DOS retrieved files", ', '.join(files))
 
 
 def get_batch_dos_results(batch_result: dict) -> t.Dict[str, dict]:
@@ -652,50 +660,54 @@ def print_batch_dos_results(batch_result: dict) -> None:
         batch_result: Return value from quick_dos_batch
     """
     from .utils import get_status
+    from .console import (
+        console, print_calculation_header, print_status,
+        print_energy, print_structure_info, print_field, print_warning
+    )
 
     wg_pk = batch_result['__workgraph_pk__']
     status = get_status(wg_pk)
 
-    print(f"Batch DOS Calculation - WorkGraph PK {wg_pk}")
-    print(f"  Status: {status}")
-    print()
+    print_calculation_header(wg_pk, "Batch DOS Calculation")
+    print_status(status)
+    console.print()
 
     if status != 'finished':
-        print("  (Calculation not finished, results may be incomplete)")
-        print()
+        print_warning("Calculation not finished, results may be incomplete", indent=2)
+        console.print()
 
     results = get_batch_dos_results(batch_result)
 
     for key, dos_result in results.items():
-        print(f"  [{key}]")
+        console.print(f"  [header][{key}][/header]")
 
         if dos_result['energy'] is not None:
-            print(f"    SCF Energy: {dos_result['energy']:.6f} eV")
+            console.print(f"    [bold]SCF Energy:[/bold] [energy]{dos_result['energy']:.6f}[/energy] eV")
 
         if dos_result['structure'] is not None:
             struct = dos_result['structure']
             formula = struct.get_formula()
-            print(f"    Structure: {formula} (PK: {struct.pk})")
+            console.print(f"    [bold]Structure:[/bold] {formula} [dim](PK: {struct.pk})[/dim]")
 
         if dos_result['scf_misc'] is not None:
             scf_misc = dos_result['scf_misc']
-            print(f"    SCF misc: Dict (run_status: {scf_misc.get('run_status', 'N/A')})")
+            console.print(f"    [bold]SCF misc:[/bold] Dict [dim](run_status: {scf_misc.get('run_status', 'N/A')})[/dim]")
 
         if dos_result['dos_misc'] is not None:
             dos_misc = dos_result['dos_misc']
-            print(f"    DOS misc: Dict (run_status: {dos_misc.get('run_status', 'N/A')})")
+            console.print(f"    [bold]DOS misc:[/bold] Dict [dim](run_status: {dos_misc.get('run_status', 'N/A')})[/dim]")
 
         if dos_result['scf_remote'] is not None:
-            print(f"    SCF remote_folder: PK {dos_result['scf_remote'].pk}")
+            console.print(f"    [bold]SCF remote_folder:[/bold] PK [pk]{dos_result['scf_remote'].pk}[/pk]")
 
         if dos_result['dos_remote'] is not None:
-            print(f"    DOS remote_folder: PK {dos_result['dos_remote'].pk}")
+            console.print(f"    [bold]DOS remote_folder:[/bold] PK [pk]{dos_result['dos_remote'].pk}[/pk]")
 
         if dos_result['files'] is not None:
             files = dos_result['files'].list_object_names()
-            print(f"    DOS retrieved files: {', '.join(files)}")
+            console.print(f"    [bold]DOS retrieved files:[/bold] [dim]{', '.join(files)}[/dim]")
 
-        print()
+        console.print()
 
 
 def get_sequential_results(sequential_result: dict) -> t.Dict[str, dict]:
@@ -806,20 +818,21 @@ def print_sequential_results(sequential_result: dict) -> None:
         >>> print_sequential_results(result)
     """
     from .utils import get_status
+    from .console import console, print_calculation_header, print_status, print_warning
 
     wg_pk = sequential_result['__workgraph_pk__']
     stage_names = sequential_result.get('__stage_names__', [])
     stage_types = sequential_result.get('__stage_types__', {})
     status = get_status(wg_pk)
 
-    print(f"Sequential VASP Calculation - WorkGraph PK {wg_pk}")
-    print(f"  Status: {status}")
-    print(f"  Stages: {len(stage_names)}")
-    print()
+    print_calculation_header(wg_pk, "Sequential VASP Calculation")
+    print_status(status)
+    console.print(f"  [bold]Stages:[/bold] {len(stage_names)}")
+    console.print()
 
     if status != 'finished':
-        print("  (Calculation not finished, results may be incomplete)")
-        print()
+        print_warning("Calculation not finished, results may be incomplete", indent=2)
+        console.print()
 
     results = get_sequential_results(sequential_result)
 
@@ -831,4 +844,4 @@ def print_sequential_results(sequential_result: dict) -> None:
         brick = get_brick_module(stage_type)
         brick.print_stage_results(i, stage_name, stage_result)
 
-        print()
+        console.print()

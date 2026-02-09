@@ -183,8 +183,9 @@ def export_files(
         files_to_export = [f for f in files if f in available_files]
         missing = [f for f in files if f not in available_files]
         if missing:
-            print(f"Warning: Files not found in retrieved: {missing}")
-            print(f"Available files: {available_files}")
+            from .console import print_warning, console
+            print_warning(f"Files not found in retrieved: {missing}")
+            console.print(f"[dim]Available files: {available_files}[/dim]")
 
     # Export files
     exported = []
@@ -296,6 +297,7 @@ def prepare_restart_settings(
         restart_settings['incar_additions']['ICHARG'] = 1
 
     return structure, restart_settings
+
 
 def merge_velocities_into_structure_data(
     structure: orm.StructureData,
