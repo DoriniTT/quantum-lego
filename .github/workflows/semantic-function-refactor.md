@@ -22,7 +22,7 @@ safe-outputs:
     - cookie
     max: 1
     title-prefix: "[refactor] "
-description: Analyzes Go codebase daily to identify opportunities for semantic function extraction and refactoring
+description: Analyzes Python codebase daily to identify opportunities for semantic function extraction and refactoring
 engine: claude
 name: Semantic Function Refactoring
 source: github/gh-aw/.github/workflows/semantic-function-refactor.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
@@ -30,31 +30,31 @@ strict: true
 timeout-minutes: 20
 tools:
   bash:
-  - find pkg -name '*.go' ! -name '*_test.go' -type f
-  - find pkg -type f -name '*.go' ! -name '*_test.go'
-  - find pkg/ -maxdepth 1 -ls
-  - find pkg/workflow/ -maxdepth 1 -ls
-  - wc -l pkg/**/*.go
-  - head -n * pkg/**/*.go
-  - grep -r 'func ' pkg --include='*.go'
-  - cat pkg/**/*.go
+  - find . -name '*.py' ! -name 'test_*.py' ! -path '*/tests/*' ! -path '*/.venv/*' ! -path '*/venv/*' -type f
+  - find . -type f -name '*.py' ! -name 'test_*.py' ! -path '*/tests/*'
+  - find src/ -maxdepth 1 -ls 2>/dev/null || find . -maxdepth 2 -name '*.py' -ls
+  - find aiida_vasp/ -maxdepth 1 -ls 2>/dev/null || true
+  - wc -l **/*.py
+  - head -n * **/*.py
+  - grep -r 'def ' . --include='*.py' ! -path '*/tests/*' ! -path '*/.venv/*'
+  - cat **/*.py
   edit: null
   github:
     toolsets:
     - default
     - issues
   serena:
-  - go
+  - python
 ---
 # Semantic Function Clustering and Refactoring
 
-You are an AI agent that analyzes Go code to identify potential refactoring opportunities by clustering functions semantically and detecting outliers or duplicates.
+You are an AI agent that analyzes Python code to identify potential refactoring opportunities by clustering functions semantically and detecting outliers or duplicates.
 
 ## Mission
 
 **IMPORTANT: Before performing analysis, close any existing open issues with the title prefix `[refactor]` to avoid duplicate issues.**
 
-Analyze all Go source files (`.go` files, excluding test files) in the repository to:
+Analyze all Python source files (`.py` files, excluding test files) in the repository to:
 1. **First, close existing open issues** with the `[refactor]` prefix
 2. Collect all function names per file
 3. Cluster functions semantically by name and purpose
@@ -64,11 +64,11 @@ Analyze all Go source files (`.go` files, excluding test files) in the repositor
 
 ## Important Constraints
 
-1. **Only analyze `.go` files** - Ignore all other file types
-2. **Skip test files** - Never analyze files ending in `_test.go`
-3. **Focus on pkg/ directory** - Primary analysis area
+1. **Only analyze `.py` files** - Ignore all other file types
+2. **Skip test files** - Never analyze files starting with `test_` or in `tests/` directories
+3. **Skip virtual environments** - Exclude `.venv/`, `venv/`, `__pycache__/` directories
 4. **Use Serena for semantic analysis** - Leverage the MCP server's capabilities
-5. **One file per feature rule** - Files should be named after their primary purpose/feature
+5. **One module per feature rule** - Modules should be named after their primary purpose/feature
 
 ## Serena Configuration
 
@@ -76,7 +76,7 @@ The Serena MCP server is configured for this workspace:
 - **Workspace**: ${{ github.workspace }}
 - **Memory cache**: /tmp/gh-aw/cache-memory/serena
 - **Context**: codex
-- **Language service**: Go (gopls)
+- **Language service**: Python (pyright)
 
 ## Close Existing Refactor Issues (CRITICAL FIRST STEP)
 
@@ -122,38 +122,42 @@ After closing existing issues, activate the project in Serena to enable semantic
 
 Use Serena's `activate_project` tool with the workspace path.
 
-### 3. Discover Go Source Files
+### 3. Discover Python Source Files
 
-Find all non-test Go files in the repository:
+Find all non-test Python files in the repository:
 
 ```bash
-# Find all Go files excluding tests
-find pkg -name "*.go" ! -name "*_test.go" -type f | sort
+# Find all Python files excluding tests and virtual environments
+find . -name "*.py" ! -name "test_*.py" ! -path "*/tests/*" ! -path "*/.venv/*" ! -path "*/venv/*" ! -path "*/__pycache__/*" -type f | sort
 ```
 
 Group files by package/directory to understand the organization.
 
 ### 4. Collect Function Names Per File
 
-For each discovered Go file:
+For each discovered Python file:
 
-1. Use Serena's `get_symbols_overview` to get all symbols (functions, methods, types) in the file
+1. Use Serena's `get_symbols_overview` to get all symbols (functions, methods, classes) in the file
 2. Use Serena's `read_file` if needed to understand context
 3. Create a structured inventory of:
    - File path
-   - Package name
+   - Module name
    - All function names
-   - All method names (with receiver type)
-   - Function signatures (parameters and return types)
+   - All method names (with class name)
+   - Function signatures (parameters, return type annotations if present)
 
 Example structure:
 ```
-File: pkg/workflow/compiler.go
-Package: workflow
+File: aiida_vasp/workflows/base.py
+Module: aiida_vasp.workflows.base
 Functions:
-  - CompileWorkflow(path string) error
-  - compileFile(data []byte) (*Workflow, error)
-  - validateFrontmatter(fm map[string]interface{}) error
+  - validate_inputs(inputs: dict) -> bool
+  - process_results(node: Node) -> dict
+Classes:
+  - BaseWorkChain(WorkChain):
+      Methods:
+        - setup(self) -> None
+        - run_calculation(self) -> ProcessNode
 ```
 
 ### 5. Semantic Clustering Analysis
@@ -167,11 +171,12 @@ Analyze the collected functions to identify patterns:
 - Identify functions that share common functionality
 
 **File Organization Rules:**
-According to Go best practices, files should be organized by feature:
-- `compiler.go` - compilation-related functions
-- `parser.go` - parsing-related functions
-- `validator.go` - validation-related functions
-- `create_*.go` - creation/construction functions for specific entities
+According to Python best practices, modules should be organized by feature:
+- `compiler.py` - compilation-related functions
+- `parser.py` - parsing-related functions
+- `validator.py` - validation-related functions
+- `utils.py` - utility functions
+- Module naming should be lowercase with underscores (snake_case)
 
 **Identify Outliers:**
 Look for functions that don't match their file's primary purpose:
@@ -206,15 +211,16 @@ Apply deep reasoning to identify refactoring opportunities:
 **Duplicate Detection Criteria:**
 - Functions with >80% code similarity
 - Functions with identical logic but different variable names
-- Functions that perform the same operation on different types (candidates for generics)
+- Functions that perform the same operation on different types (candidates for type hints/protocols)
 - Helper functions repeated across multiple files
 
 **Refactoring Patterns to Suggest:**
 - **Extract Common Function**: When 2+ functions share significant code
-- **Move to Appropriate File**: When a function is in the wrong file based on its purpose
-- **Create Utility File**: When helper functions are scattered
-- **Use Generics**: When similar functions differ only by type
-- **Extract Interface**: When similar methods are defined on different types
+- **Move to Appropriate Module**: When a function is in the wrong module based on its purpose
+- **Create Utility Module**: When helper functions are scattered
+- **Use Type Hints & Protocols**: When similar functions differ only by type
+- **Extract Base Class/Protocol**: When similar methods are defined on different classes
+- **Use Decorators**: When multiple functions share similar pre/post-processing logic
 
 ### 8. Generate Refactoring Report
 
@@ -233,9 +239,9 @@ Create a comprehensive issue with findings:
 
 ## Function Inventory
 
-### By Package
+### By Module
 
-[List of packages with file counts and primary purposes]
+[List of modules with file counts and primary purposes]
 
 ### Clustering Results
 
@@ -247,12 +253,12 @@ Create a comprehensive issue with findings:
 
 **Issue**: Functions that don't match their file's primary purpose
 
-#### Example: Validation in Compiler File
+#### Example: Validation in Compiler Module
 
-- **File**: `pkg/workflow/compiler.go`
-- **Function**: `validateConfig(cfg *Config) error`
-- **Issue**: Validation function in compiler file
-- **Recommendation**: Move to `pkg/workflow/validation.go`
+- **File**: `aiida_vasp/workflows/compiler.py`
+- **Function**: `validate_config(cfg: dict) -> bool`
+- **Issue**: Validation function in compiler module
+- **Recommendation**: Move to `aiida_vasp/workflows/validation.py`
 - **Estimated Impact**: Improved code organization
 
 [... more outliers ...]
@@ -263,25 +269,23 @@ Create a comprehensive issue with findings:
 
 #### Example: String Processing Duplicates
 
-- **Occurrence 1**: `pkg/workflow/helpers.go:processString(s string) string`
-- **Occurrence 2**: `pkg/workflow/utils.go:cleanString(s string) string`
+- **Occurrence 1**: `aiida_vasp/utils/helpers.py:process_string(s: str) -> str`
+- **Occurrence 2**: `aiida_vasp/utils/text.py:clean_string(s: str) -> str`
 - **Similarity**: 90% code similarity
 - **Code Comparison**:
-  ```go
-  // helpers.go
-  func processString(s string) string {
-      s = strings.TrimSpace(s)
-      s = strings.ToLower(s)
+  ```python
+  # helpers.py
+  def process_string(s: str) -> str:
+      s = s.strip()
+      s = s.lower()
       return s
-  }
-  
-  // utils.go
-  func cleanString(s string) string {
-      s = strings.TrimSpace(s)
-      return strings.ToLower(s)
-  }
+
+  # text.py
+  def clean_string(s: str) -> str:
+      s = s.strip()
+      return s.lower()
   ```
-- **Recommendation**: Consolidate into single function in `pkg/workflow/strings.go`
+- **Recommendation**: Consolidate into single function in `aiida_vasp/utils/strings.py`
 - **Estimated Impact**: Reduced code duplication, easier maintenance
 
 [... more duplicates ...]
@@ -291,35 +295,35 @@ Create a comprehensive issue with findings:
 **Issue**: Similar helper functions spread across multiple files
 
 **Examples**:
-- `parseValue()` in 3 different files
-- `formatError()` in 4 different files
-- `sanitizeInput()` in 2 different files
+- `parse_value()` in 3 different files
+- `format_error()` in 4 different files
+- `sanitize_input()` in 2 different files
 
-**Recommendation**: Create `pkg/workflow/helpers.go` or enhance existing helper files
+**Recommendation**: Create `utils/helpers.py` or enhance existing helper modules
 **Estimated Impact**: Centralized utilities, easier testing
 
-### 4. Opportunities for Generics
+### 4. Opportunities for Type Hints & Protocols
 
-**Issue**: Type-specific functions that could use generics
+**Issue**: Type-specific functions that could use Protocol/TypeVar for better type safety
 
-[Examples of functions that differ only by type]
+[Examples of functions that differ only by type and could benefit from typing.Protocol or TypeVar]
 
 ## Detailed Function Clusters
 
 ### Cluster 1: Creation Functions
 
-**Pattern**: `create*` functions
+**Pattern**: `create_*` functions
 **Files**: [list of files]
 **Functions**:
-- `pkg/workflow/create_issue.go:CreateIssue(...)`
-- `pkg/workflow/create_pr.go:CreatePR(...)`
-- `pkg/workflow/create_discussion.go:CreateDiscussion(...)`
+- `workflows/issue.py:create_issue(...)`
+- `workflows/pr.py:create_pr(...)`
+- `workflows/discussion.py:create_discussion(...)`
 
-**Analysis**: Well-organized - each creation function has its own file ✓
+**Analysis**: Well-organized - each creation function has its own module ✓
 
 ### Cluster 2: Parsing Functions
 
-**Pattern**: `parse*` functions
+**Pattern**: `parse_*` functions
 **Files**: [list of files]
 **Functions**: [list]
 
@@ -332,8 +336,8 @@ Create a comprehensive issue with findings:
 ### Priority 1: High Impact
 
 1. **Move Outlier Functions**
-   - Move validation functions to validation.go
-   - Move parser functions to appropriate parser files
+   - Move validation functions to validation.py
+   - Move parser functions to appropriate parser modules
    - Estimated effort: 2-4 hours
    - Benefits: Clearer code organization
 
@@ -346,17 +350,18 @@ Create a comprehensive issue with findings:
 ### Priority 2: Medium Impact
 
 3. **Centralize Helper Functions**
-   - Create or enhance helper utility files
+   - Create or enhance helper utility modules
    - Move scattered helpers to central location
    - Estimated effort: 4-6 hours
    - Benefits: Easier discoverability, reduced duplication
 
 ### Priority 3: Long-term Improvements
 
-4. **Consider Generics for Type-Specific Functions**
-   - Identify candidates for generic implementations
+4. **Add Type Hints & Use Protocols for Type-Specific Functions**
+   - Identify candidates for Protocol/TypeVar implementations
+   - Add comprehensive type hints for better IDE support
    - Estimated effort: 6-8 hours
-   - Benefits: Type-safe code reuse
+   - Benefits: Type-safe code reuse, better IDE autocomplete
 
 ## Implementation Checklist
 
@@ -370,8 +375,8 @@ Create a comprehensive issue with findings:
 
 ## Analysis Metadata
 
-- **Total Go Files Analyzed**: [count]
-- **Total Functions Cataloged**: [count]
+- **Total Python Files Analyzed**: [count]
+- **Total Functions/Methods Cataloged**: [count]
 - **Function Clusters Identified**: [count]
 - **Outliers Found**: [count]
 - **Duplicates Detected**: [count]
@@ -395,7 +400,7 @@ Create a comprehensive issue with findings:
 ### Accuracy
 - Verify findings before reporting
 - Distinguish between acceptable duplication and problematic duplication
-- Consider Go idioms and best practices
+- Consider Python idioms and PEP 8 best practices
 - Provide specific, actionable recommendations
 
 ### Issue Creation
@@ -422,9 +427,10 @@ Create a comprehensive issue with findings:
 ### What to Skip
 - Minor naming inconsistencies
 - Single-occurrence patterns
-- Language-specific idioms (constructors, standard patterns)
+- Language-specific idioms (dunder methods, property decorators, standard patterns)
 - Test files (already excluded)
 - Trivial helper functions (<5 lines)
+- Virtual environment directories and generated files
 
 ## Serena Tool Usage Guide
 
@@ -437,40 +443,40 @@ Args: { "path": "${{ github.workspace }}" }
 ### Symbol Overview
 ```
 Tool: get_symbols_overview
-Args: { "file_path": "pkg/workflow/compiler.go" }
+Args: { "file_path": "aiida_vasp/workflows/base.py" }
 ```
 
 ### Find Similar Symbols
 ```
 Tool: find_symbol
-Args: { "symbol_name": "parseConfig", "workspace": "${{ github.workspace }}" }
+Args: { "symbol_name": "parse_config", "workspace": "${{ github.workspace }}" }
 ```
 
 ### Search for Patterns
 ```
 Tool: search_for_pattern
-Args: { "pattern": "func.*Config.*error", "workspace": "${{ github.workspace }}" }
+Args: { "pattern": "def.*config.*->.*:", "workspace": "${{ github.workspace }}" }
 ```
 
 ### Find References
 ```
 Tool: find_referencing_symbols
-Args: { "symbol_name": "CompileWorkflow", "file_path": "pkg/workflow/compiler.go" }
+Args: { "symbol_name": "run_workflow", "file_path": "aiida_vasp/workflows/base.py" }
 ```
 
 ### Read File Content
 ```
 Tool: read_file
-Args: { "file_path": "pkg/workflow/compiler.go" }
+Args: { "file_path": "aiida_vasp/workflows/base.py" }
 ```
 
 ## Success Criteria
 
 This analysis is successful when:
-1. ✅ All non-test Go files in pkg/ are analyzed
-2. ✅ Function names and signatures are collected and organized
+1. ✅ All non-test Python files are analyzed (excluding venv, __pycache__)
+2. ✅ Function and method names with signatures are collected and organized
 3. ✅ Semantic clusters are identified based on naming and purpose
-4. ✅ Outliers (functions in wrong files) are detected
+4. ✅ Outliers (functions in wrong modules) are detected
 5. ✅ Duplicates are identified using Serena's semantic analysis
 6. ✅ Concrete refactoring recommendations are provided
 7. ✅ A detailed issue is created with actionable findings
