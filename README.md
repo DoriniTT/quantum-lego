@@ -1,1 +1,1 @@
-# quantum-lego
+# Quantum Lego
