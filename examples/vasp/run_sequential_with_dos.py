@@ -43,7 +43,7 @@ potential_mapping = {'Sn': 'Sn_d', 'O': 'O'}
 options = {
     'resources': {
         'num_machines': 1,
-        'num_mpiprocs_per_machine': 8,
+        'num_mpiprocs_per_machine': 4,
     },
 }
 

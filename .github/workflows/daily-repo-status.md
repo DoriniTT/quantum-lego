@@ -6,7 +6,6 @@ description: |
   and project recommendations.
 
 engine: claude
-    model: claude-sonnet-4.5
 
 on:
   schedule: daily
