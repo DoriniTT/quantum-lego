@@ -791,7 +791,7 @@ stages = [
 The Quantum Lego brick system provides:
 
 1. **13 Brick Types**: 5 structure-producing, 2 non-structure computation, 6 analysis
-2. **14 Port Types**: Typed data flow with validation
+2. **15 Port Types**: Typed data flow with validation
 3. **9 Source Modes**: Flexible connection patterns
 4. **Automatic Validation**: Type checking, prerequisite checking, warning system
 5. **Common Patterns**: Sequential, batch, restart chaining, multi-stage analysis
