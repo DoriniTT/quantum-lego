@@ -387,11 +387,13 @@ def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None
         stage_name: Name of the stage.
         stage_result: Result dict from get_stage_results.
     """
-    print(f"  [{index}] {stage_name} (THICKNESS CONVERGENCE)")
+    from ..console import console, print_stage_header, create_results_table
+
+    print_stage_header(index, stage_name, brick_type="thickness")
 
     conv = stage_result.get('convergence_results')
     if conv is None:
-        print("      (No convergence results available)")
+        console.print("      [dim](No convergence results available)[/dim]")
         return
 
     summary = conv.get('summary', {})
@@ -402,24 +404,31 @@ def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None
     recommended = summary.get('recommended_layers')
     threshold = summary.get('convergence_threshold', 0.01)
 
-    print(f"      Miller indices: ({', '.join(str(m) for m in miller)})")
-    print(f"      Threshold: {threshold * 1000:.1f} mJ/m²")
-    print()
+    console.print(f"      [bold]Miller indices:[/bold] ({', '.join(str(m) for m in miller)})")
+    console.print(f"      [bold]Threshold:[/bold] {threshold * 1000:.1f} mJ/m²")
+    console.print()
 
     if thicknesses and energies:
-        print(f"      {'Layers':>8s}  {'γ (J/m²)':>10s}  {'Δ (mJ/m²)':>10s}")
-        print(f"      {'─' * 8}  {'─' * 10}  {'─' * 10}")
+        table = create_results_table(show_header=True)
+        table.add_column("Layers", justify="right", style="cyan")
+        table.add_column("γ (J/m²)", justify="right", style="magenta")
+        table.add_column("Δ (mJ/m²)", justify="right", style="yellow")
+
         for i, (n, gamma) in enumerate(zip(thicknesses, energies)):
             if i == 0:
                 delta_str = '—'
             else:
                 delta = abs(energies[i] - energies[i - 1]) * 1000
                 delta_str = f'{delta:.1f}'
-            print(f"      {n:8d}  {gamma:10.4f}  {delta_str:>10s}")
 
-    print()
+            style = "green" if (i == len(thicknesses) - 1 and converged) else None
+            table.add_row(str(n), f"{gamma:.4f}", delta_str, style=style)
+
+        console.print("      ", table)
+
+    console.print()
     if converged:
-        print(f"      CONVERGED at {recommended} layers")
+        console.print(f"      [success]✓ CONVERGED at {recommended} layers[/success]")
     else:
-        print(f"      NOT CONVERGED (tested up to "
-              f"{max(thicknesses) if thicknesses else '?'} layers)")
+        max_layers = max(thicknesses) if thicknesses else '?'
+        console.print(f"      [warning]⚠ NOT CONVERGED[/warning] [dim](tested up to {max_layers} layers)[/dim]")

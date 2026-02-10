@@ -221,20 +221,22 @@ def _extract_stage_from_workgraph(wg_node, stage_name: str, result: dict) -> Non
 
 def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None:
     """Print formatted results for a generate_neb_images stage."""
-    print(f"  [{index}] {stage_name} (GENERATE NEB IMAGES)")
+    from ..console import console, print_stage_header
+
+    print_stage_header(index, stage_name, brick_type="generate_neb_images")
 
     images_meta = stage_result.get('images') or {}
     n_images = images_meta.get('n_images')
     labels = images_meta.get('labels', [])
     if n_images is not None:
-        print(f"      Images generated: {n_images}")
+        console.print(f"      [bold]Images generated:[/bold] {n_images}")
     if labels:
-        print(f"      Labels: {', '.join(labels)}")
+        console.print(f"      [bold]Labels:[/bold] [dim]{', '.join(labels)}[/dim]")
     if stage_result.get('image_structures'):
         pks = [
-            f"{label}=PK {node.pk}"
+            f"{label}=PK [pk]{node.pk}[/pk]"
             for label, node in sorted(stage_result['image_structures'].items())
             if hasattr(node, 'pk')
         ]
         if pks:
-            print(f"      Structures: {', '.join(pks)}")
+            console.print(f"      [bold]Structures:[/bold] {', '.join(pks)}")

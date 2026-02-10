@@ -226,34 +226,36 @@ def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None
         stage_name: Name of the stage.
         stage_result: Result dict from get_stage_results.
     """
-    print(f"  [{index}] {stage_name} (BADER)")
+    from ..console import console, print_stage_header
+
+    print_stage_header(index, stage_name, brick_type="bader")
 
     if stage_result['charges'] is not None:
         charges = stage_result['charges']
         atoms = charges.get('atoms', [])
         total = charges.get('total_charge', 0.0)
         vacuum = charges.get('vacuum_charge', 0.0)
-        print(f"      Atoms analyzed: {len(atoms)}")
-        print(f"      Total charge: {total:.5f}")
-        print(f"      Vacuum charge: {vacuum:.5f}")
+        console.print(f"      [bold]Atoms analyzed:[/bold] {len(atoms)}")
+        console.print(f"      [bold]Total charge:[/bold] {total:.5f}")
+        console.print(f"      [bold]Vacuum charge:[/bold] {vacuum:.5f}")
 
         # Print per-atom charges
         if atoms:
-            print("      Per-atom Bader charges:")
+            console.print("      [bold]Per-atom Bader charges:[/bold]")
             for atom in atoms:
                 elem = atom.get('element', '?')
                 bader_q = atom.get('bader_charge', None)
                 valence = atom.get('valence', None)
                 if bader_q is not None:
-                    print(
-                        f"        #{atom['index']:>3d} {elem:>2s}  "
-                        f"charge={bader_q:+.5f}  "
+                    console.print(
+                        f"        [dim]#[/dim]{atom['index']:>3d} [cyan]{elem:>2s}[/cyan]  "
+                        f"charge=[energy]{bader_q:+.5f}[/energy]  "
                         f"valence={valence:.1f}  "
                         f"raw={atom['charge']:.5f}"
                     )
                 else:
-                    print(
-                        f"        #{atom['index']:>3d}  "
+                    console.print(
+                        f"        [dim]#[/dim]{atom['index']:>3d}  "
                         f"charge={atom['charge']:.5f}  "
                         f"vol={atom['volume']:.3f}"
                     )
@@ -261,9 +263,9 @@ def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None
     dat_files = stage_result.get('dat_files', {})
     if dat_files:
         file_names = ', '.join(
-            f"{k}.dat (PK {v.pk})" for k, v in dat_files.items()
+            f"{k}.dat (PK [pk]{v.pk}[/pk])" for k, v in dat_files.items()
         )
-        print(f"      Dat files: {file_names}")
+        console.print(f"      [bold]Dat files:[/bold] [dim]{file_names}[/dim]")
 
 
 # ─── Bader calcfunction tasks ────────────────────────────────────────────────

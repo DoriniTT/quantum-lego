@@ -448,16 +448,18 @@ def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None
         stage_name: Name of the stage.
         stage_result: Result dict from get_stage_results.
     """
-    print(f"  [{index}] {stage_name} (DOS)")
+    from ..console import console, print_stage_header
+
+    print_stage_header(index, stage_name, brick_type="dos")
 
     if stage_result['energy'] is not None:
-        print(f"      SCF Energy: {stage_result['energy']:.6f} eV")
+        console.print(f"      [bold]SCF Energy:[/bold] [energy]{stage_result['energy']:.6f}[/energy] eV")
 
     if stage_result['scf_misc'] is not None:
         scf_misc = stage_result['scf_misc']
         run_status = scf_misc.get('run_status', {})
         converged = run_status.get('electronic_converged', 'N/A')
-        print(f"      SCF converged: {converged}")
+        console.print(f"      [bold]SCF converged:[/bold] {converged}")
 
     if stage_result['dos_misc'] is not None:
         dos_misc = stage_result['dos_misc']
@@ -466,17 +468,17 @@ def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None
         if band_gap is not None:
             is_direct = band_props.get('is_direct_gap', False)
             gap_type = "direct" if is_direct else "indirect"
-            print(f"      Band gap: {band_gap:.4f} eV ({gap_type})")
+            console.print(f"      [bold]Band gap:[/bold] [energy]{band_gap:.4f}[/energy] eV ({gap_type})")
         fermi = dos_misc.get('fermi_level', None)
         if fermi is not None:
-            print(f"      Fermi level: {fermi:.4f} eV")
+            console.print(f"      [bold]Fermi level:[/bold] [energy]{fermi:.4f}[/energy] eV")
 
     if stage_result['scf_remote'] is not None:
-        print(f"      SCF Remote folder: PK {stage_result['scf_remote'].pk}")
+        console.print(f"      [bold]SCF Remote folder:[/bold] PK [pk]{stage_result['scf_remote'].pk}[/pk]")
 
     if stage_result['dos_remote'] is not None:
-        print(f"      DOS Remote folder: PK {stage_result['dos_remote'].pk}")
+        console.print(f"      [bold]DOS Remote folder:[/bold] PK [pk]{stage_result['dos_remote'].pk}[/pk]")
 
     if stage_result['files'] is not None:
         files = stage_result['files'].list_object_names()
-        print(f"      DOS Retrieved: {', '.join(files)}")
+        console.print(f"      [bold]DOS Retrieved:[/bold] [dim]{', '.join(files)}[/dim]")

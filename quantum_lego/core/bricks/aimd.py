@@ -750,25 +750,27 @@ def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None
         stage_name: Name of the stage.
         stage_result: Result dict from get_stage_results.
     """
-    print(f"  [{index}] {stage_name} (AIMD)")
+    from ..console import console, print_stage_header
+
+    print_stage_header(index, stage_name, brick_type="aimd")
 
     if stage_result['energy'] is not None:
-        print(f"      Energy: {stage_result['energy']:.6f} eV")
+        console.print(f"      [bold]Energy:[/bold] [energy]{stage_result['energy']:.6f}[/energy] eV")
 
     if stage_result['structure'] is not None:
         struct = stage_result['structure']
         formula = struct.get_formula()
         n_atoms = len(struct.sites)
-        print(f"      Structure: {formula} ({n_atoms} atoms, PK: {struct.pk})")
+        console.print(f"      [bold]Structure:[/bold] {formula} [dim]({n_atoms} atoms, PK: {struct.pk})[/dim]")
 
     if stage_result['misc'] is not None:
         misc = stage_result['misc']
         run_status = misc.get('run_status', 'N/A')
-        print(f"      Status: {run_status}")
+        console.print(f"      [bold]Status:[/bold] {run_status}")
 
     if stage_result['remote'] is not None:
-        print(f"      Remote folder: PK {stage_result['remote'].pk}")
+        console.print(f"      [bold]Remote folder:[/bold] PK [pk]{stage_result['remote'].pk}[/pk]")
 
     if stage_result['files'] is not None:
         files = stage_result['files'].list_object_names()
-        print(f"      Retrieved: {', '.join(files)}")
+        console.print(f"      [bold]Retrieved:[/bold] [dim]{', '.join(files)}[/dim]")
