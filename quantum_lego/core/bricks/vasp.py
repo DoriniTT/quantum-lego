@@ -3,17 +3,20 @@
 Handles standard VASP calculation stages: relaxation, SCF, etc.
 """
 
+from typing import Dict, Set, Any
+
 from aiida import orm
 from aiida.common.links import LinkType
 from aiida.plugins import WorkflowFactory
-from aiida_workgraph import task
+from aiida_workgraph import task, WorkGraph
 
 from .connections import VASP_PORTS as PORTS  # noqa: F401
 from ..common.utils import extract_total_energy
 from ..tasks import compute_dynamics
+from ..types import StageContext, StageTasksResult, VaspResults
 
 
-def validate_stage(stage: dict, stage_names: set) -> None:
+def validate_stage(stage: Dict[str, Any], stage_names: Set[str]) -> None:
     """Validate a VASP stage configuration.
 
     Args:
@@ -81,7 +84,12 @@ def validate_stage(stage: dict, stage_names: set) -> None:
             )
 
 
-def create_stage_tasks(wg, stage, stage_name, context):
+def create_stage_tasks(
+    wg: WorkGraph,
+    stage: Dict[str, Any],
+    stage_name: str,
+    context: StageContext
+) -> StageTasksResult:
     """Create VASP stage tasks in the WorkGraph.
 
     Args:
@@ -260,7 +268,12 @@ def create_stage_tasks(wg, stage, stage_name, context):
     }
 
 
-def expose_stage_outputs(wg, stage_name, stage_tasks_result, namespace_map=None):
+def expose_stage_outputs(
+    wg: WorkGraph,
+    stage_name: str,
+    stage_tasks_result: StageTasksResult,
+    namespace_map: Dict[str, str] = None
+) -> None:
     """Expose VASP stage outputs on the WorkGraph.
 
     Args:
@@ -289,8 +302,12 @@ def expose_stage_outputs(wg, stage_name, stage_tasks_result, namespace_map=None)
         setattr(wg.outputs, f'{stage_name}_retrieved', vasp_task.outputs.retrieved)
 
 
-def get_stage_results(wg_node, wg_pk: int, stage_name: str,
-                      namespace_map: dict = None) -> dict:
+def get_stage_results(
+    wg_node: Any,
+    wg_pk: int,
+    stage_name: str,
+    namespace_map: Dict[str, str] = None
+) -> VaspResults:
     """Extract results from a VASP stage in a sequential workflow.
 
     Args:
@@ -387,7 +404,9 @@ def get_stage_results(wg_node, wg_pk: int, stage_name: str,
 
 
 def _extract_sequential_stage_from_workgraph(
-    wg_node, stage_name: str, result: dict
+    wg_node: Any,
+    stage_name: str,
+    result: Dict[str, Any]
 ) -> None:
     """Extract stage results by traversing WorkGraph links.
 
@@ -442,7 +461,7 @@ def _extract_sequential_stage_from_workgraph(
                     break
 
 
-def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None:
+def print_stage_results(index: int, stage_name: str, stage_result: Dict[str, Any]) -> None:
     """Print formatted results for a VASP stage.
 
     Args:
