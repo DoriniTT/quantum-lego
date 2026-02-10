@@ -34,6 +34,10 @@ verdi daemon logshow                          # Debug daemon issues
 
 **Technology Stack:** AiiDA (workflow/provenance), AiiDA-WorkGraph (task composition), AiiDA-VASP (DFT), Pymatgen (structures), ASE (I/O)
 
+**Key Dependencies:**
+- **aiida-workgraph==1.0.0b3**: Pinned to beta version 1.0.0b3. Will be updated to stable 1.0 release when available.
+- **Python >=3.9**: Compatible with aiida-workgraph 1.0.0b3 requirement (>=3.9,<3.14)
+
 **Design Philosophy:**
 - **Incremental**: Run one calculation at a time, inspect, decide next step
 - **No presets**: Always specify parameters manually for maximum flexibility
