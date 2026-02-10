@@ -163,7 +163,7 @@ def print_error(message: str, indent: int = 0) -> None:
         >>> print_error("Calculation failed to converge")
         ✖ Error: Calculation failed to converge
     """
-    spaces = "" * indent
+    spaces = " " * indent
     console.print(f"{spaces}[error]✖ Error:[/error] {message}")
 
 
