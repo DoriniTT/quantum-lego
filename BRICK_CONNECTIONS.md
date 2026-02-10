@@ -64,7 +64,7 @@ graph TB
 
 ## Port Type System
 
-The brick connection system uses 14 typed ports for data flow:
+The brick connection system uses 15 typed ports for data flow:
 
 ```mermaid
 graph LR
