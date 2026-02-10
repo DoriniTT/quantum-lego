@@ -4,18 +4,22 @@ Wraps Quantum ESPRESSO PwBaseWorkChain from aiida-quantumespresso.
 Supports SCF, relax, and vc-relax calculations with restart chaining.
 """
 
+from typing import Dict, Set, Any
+
 from aiida import orm
 from aiida.common.links import LinkType
 from aiida.plugins import WorkflowFactory
+from aiida_workgraph import WorkGraph
 
 from .connections import QE_PORTS as PORTS  # noq: F401
+from ..types import StageContext, StageTasksResult
 
 
 # ---------------------------------------------------------------------------
 # validate_stage
 # ---------------------------------------------------------------------------
 
-def validate_stage(stage: dict, stage_names: set) -> None:
+def validate_stage(stage: Dict[str, Any], stage_names: Set[str]) -> None:
     """Validate QE stage configuration before submission.
 
     Args:
@@ -54,7 +58,12 @@ def validate_stage(stage: dict, stage_names: set) -> None:
 # create_stage_tasks
 # ---------------------------------------------------------------------------
 
-def create_stage_tasks(wg, stage: dict, stage_name: str, context: dict) -> dict:
+def create_stage_tasks(
+    wg: WorkGraph,
+    stage: Dict[str, Any],
+    stage_name: str,
+    context: StageContext
+) -> StageTasksResult:
     """Create WorkGraph tasks for QE calculation.
 
     Args:
@@ -200,8 +209,12 @@ def create_stage_tasks(wg, stage: dict, stage_name: str, context: dict) -> dict:
 # expose_stage_outputs
 # ---------------------------------------------------------------------------
 
-def expose_stage_outputs(wg, stage_name: str, stage_tasks_result: dict,
-                         namespace_map: dict = None) -> None:
+def expose_stage_outputs(
+    wg: WorkGraph,
+    stage_name: str,
+    stage_tasks_result: StageTasksResult,
+    namespace_map: Dict[str, str] = None
+) -> None:
     """Wire QE stage outputs onto the WorkGraph.
 
     Args:
@@ -234,7 +247,7 @@ def expose_stage_outputs(wg, stage_name: str, stage_tasks_result: dict,
 # get_stage_results
 # ---------------------------------------------------------------------------
 
-def get_stage_results(wg_node, wg_pk: int, stage_name: str) -> dict:
+def get_stage_results(wg_node: Any, wg_pk: int, stage_name: str) -> Dict[str, Any]:
     """Extract results from completed QE stage.
 
     Args:
@@ -297,7 +310,7 @@ def get_stage_results(wg_node, wg_pk: int, stage_name: str) -> dict:
 # print_stage_results
 # ---------------------------------------------------------------------------
 
-def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None:
+def print_stage_results(index: int, stage_name: str, stage_result: Dict[str, Any]) -> None:
     """Print formatted results for QE stage.
 
     Args:
