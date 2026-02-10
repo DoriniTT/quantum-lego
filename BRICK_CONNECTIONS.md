@@ -510,7 +510,7 @@ graph LR
 
 | Mode | Description | Example |
 |------|-------------|---------|
-| `auto` | VASP-specific: uses previous stage or input | `'source': 'auto'` → reads `structure_from` field |
+| `auto` | General mode for structure-bearing bricks: resolves structure from `structure_from` (defaulting to `previous`/`input` when absent) | `'source': 'auto'` → uses `structure_from` or falls back to previous/input |
 | `structure_from` | Reference structure from named stage | `'structure_from': 'relax'` |
 | `energy_from` | Reference energy from named stage | `'energy_from': 'scf'` |
 | `charge_from` | Bader: reference VASP charge stage | `'charge_from': 'scf'` |
