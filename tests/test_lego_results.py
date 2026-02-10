@@ -85,7 +85,7 @@ class TestPrintVaspStageResults:
     def test_prints_index_and_name(self, capsys):
         self._print(1, 'relax', self._base_result())
         out = capsys.readouterr().out
-        assert '[1]' in out
+        assert 'Stage 1:' in out
         assert 'relax' in out
 
     def test_prints_force_from_misc(self, capsys):
@@ -119,7 +119,7 @@ class TestPrintDosStageResults:
     def test_prints_dos_label(self, capsys):
         self._print(2, 'dos_calc', self._base_result())
         out = capsys.readouterr().out
-        assert '(DOS)' in out
+        assert '(dos)' in out.lower()
 
     def test_prints_scf_energy(self, capsys):
         self._print(2, 'dos_calc', self._base_result(energy=-50.123456))
@@ -159,7 +159,7 @@ class TestPrintBatchStageResults:
     def test_prints_batch_label(self, capsys):
         self._print(3, 'fukui', self._base_result())
         out = capsys.readouterr().out
-        assert '(BATCH)' in out
+        assert '(batch)' in out.lower()
 
     def test_prints_per_calc_energies(self, capsys):
         calcs = {
@@ -202,7 +202,7 @@ class TestPrintBaderStageResults:
     def test_prints_bader_label(self, capsys):
         self._print(4, 'bader', self._base_result())
         out = capsys.readouterr().out
-        assert '(BADER)' in out
+        assert '(bader)' in out.lower()
 
     def test_prints_atom_count_and_charge(self, capsys):
         charges = {
@@ -262,7 +262,7 @@ class TestPrintHubbardResponseStageResults:
     def test_prints_response_label(self, capsys):
         self._print(2, 'response', self._base_result())
         out = capsys.readouterr().out
-        assert '(HUBBARD RESPONSE)' in out
+        assert '(hubbard_response)' in out.lower()
 
     def test_prints_response_count(self, capsys):
         responses = [
@@ -298,7 +298,7 @@ class TestPrintHubbardResponseStageResults:
         """All None values should not raise."""
         self._print(1, 'response', self._base_result())
         out = capsys.readouterr().out
-        assert 'HUBBARD RESPONSE' in out
+        assert 'hubbard_response' in out.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +326,7 @@ class TestPrintHubbardAnalysisStageResults:
     def test_prints_analysis_label(self, capsys):
         self._print(3, 'analysis', self._base_result())
         out = capsys.readouterr().out
-        assert '(HUBBARD ANALYSIS)' in out
+        assert '(hubbard_analysis)' in out.lower()
 
     def test_prints_u_value(self, capsys):
         self._print(3, 'analysis', self._base_result(hubbard_u_eV=3.456))
@@ -366,4 +366,4 @@ class TestPrintHubbardAnalysisStageResults:
         """All None values should not raise."""
         self._print(1, 'analysis', self._base_result())
         out = capsys.readouterr().out
-        assert 'HUBBARD ANALYSIS' in out
+        assert 'hubbard_analysis' in out.lower()

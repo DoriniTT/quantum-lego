@@ -410,10 +410,14 @@ def print_stage_results(index: int, stage_name: str, stage_result: Dict[str, Any
     calculations = stage_result.get('calculations', {})
     if calculations:
         for calc_label, calc_result in calculations.items():
+            label = f"[cyan]{calc_label}[/cyan]"
             if calc_result['energy'] is not None:
-                console.print(f"      [{calc_label}] [bold]Energy:[/bold] [energy]{calc_result['energy']:.6f}[/energy] eV")
+                console.print(
+                    f"      {label} [bold]Energy:[/bold] "
+                    f"[energy]{calc_result['energy']:.6f}[/energy] eV"
+                )
             else:
-                console.print(f"      [{calc_label}] [bold]Energy:[/bold] N/A")
+                console.print(f"      {label} [bold]Energy:[/bold] N/A")
 
             if calc_result.get('misc') is not None:
                 misc = calc_result['misc']
