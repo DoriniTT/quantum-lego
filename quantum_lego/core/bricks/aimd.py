@@ -13,6 +13,10 @@ from .connections import AIMD_PORTS as PORTS  # noqa: F401
 from ..common.utils import extract_total_energy
 
 
+# Core trajectory array names that should not be overwritten when copying arrays
+CORE_TRAJECTORY_ARRAYS = frozenset({'positions', 'cells', 'steps', 'times', 'velocities'})
+
+
 def _looks_fractional_trajectory_positions(positions, cells, tol: float = 0.25) -> bool:
     """Heuristic: detect fractional trajectory coordinates (0..1 scale)."""
     import numpy as np
@@ -72,9 +76,8 @@ def ensure_cartesian_trajectory(
         velocities=velocities,
     )
 
-    core_arrays = {'positions', 'cells', 'steps', 'times', 'velocities'}
     for array_name in trajectory.get_arraynames():
-        if array_name in core_arrays:
+        if array_name in CORE_TRAJECTORY_ARRAYS:
             continue
         result.set_array(array_name, trajectory.get_array(array_name))
 
@@ -228,11 +231,10 @@ def _build_aimd_parser_settings(existing: dict | None = None) -> dict:
     """
     parser_settings = dict(existing or {})
 
-    include_node = list(parser_settings.get('include_node', []))
-    for node_name in ('trajectory', 'structure', 'kpoints'):
-        if node_name not in include_node:
-            include_node.append(node_name)
-    parser_settings['include_node'] = include_node
+    # Use set union to merge required nodes with existing ones (declarative style)
+    required_nodes = {'trajectory', 'structure', 'kpoints'}
+    existing_nodes = set(parser_settings.get('include_node', []))
+    parser_settings['include_node'] = list(existing_nodes | required_nodes)
 
     # Keep legacy flags for compatibility with older parser configurations.
     parser_settings['add_energy'] = True
