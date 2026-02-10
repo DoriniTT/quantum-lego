@@ -62,8 +62,8 @@ class TestDosValidation:
         with pytest.raises(ValueError, match="dos_incar"):
             validate_stage(stage, {'relax'})
 
-    def test_validate_stage_requires_structure_from(self):
-        """validate_stage should require structure_from for DOS stages."""
+    def test_validate_stage_requires_structure_source(self):
+        """validate_stage should require structure or structure_from for DOS stages."""
         from quantum_lego.core.bricks.dos import validate_stage
 
         stage = {
@@ -73,8 +73,22 @@ class TestDosValidation:
             'dos_incar': {'ismear': -5},
         }
 
-        with pytest.raises(ValueError, match="structure_from"):
+        with pytest.raises(ValueError, match="structure source"):
             validate_stage(stage, set())
+
+    def test_validate_stage_accepts_explicit_structure(self):
+        """validate_stage should accept DOS stage with explicit structure."""
+        from quantum_lego.core.bricks.dos import validate_stage
+
+        stage = {
+            'name': 'dos',
+            'type': 'dos',
+            'scf_incar': {'encut': 300},
+            'dos_incar': {'ismear': -5},
+            'structure': object(),
+        }
+
+        validate_stage(stage, set())
 
     def test_validate_stage_rejects_nonexistent_structure_from(self):
         """validate_stage should reject structure_from that doesn't reference a previous stage."""

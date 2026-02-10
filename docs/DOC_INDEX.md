@@ -22,6 +22,7 @@ Welcome to the Quantum Lego documentation! This page helps you navigate the docu
 - Your first VASP calculation
 - Common calculation types (relax, DOS, batch)
 - Sequential workflows
+- Mixed-source DOS stages (`structure_from` and explicit `structure`)
 - Essential monitoring commands
 - Common pitfalls and solutions
 
@@ -161,6 +162,10 @@ For contributors or developers integrating Quantum Lego.
 ### "I need to calculate DOS"
 → [DOCUMENTATION.md - DOS Brick](DOCUMENTATION.md#2-dos-brick-dos)
 → [VISUAL_GUIDE.md - DOS Calculation](VISUAL_GUIDE.md#dos-calculation-two-step-process)
+
+### "I want one WorkGraph with mixed structure sources"
+→ [DOCUMENTATION.md - Mixed Structure Sources in One WorkGraph](DOCUMENTATION.md#mixed-structure-sources-in-one-workgraph)
+→ Example script: `examples/vasp/run_mixed_dos_sources.py`
 
 ### "I need to run multiple structures"
 → [DOCUMENTATION.md - Batch Brick](DOCUMENTATION.md#3-batch-brick-batch)

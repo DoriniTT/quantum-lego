@@ -178,14 +178,25 @@ stages = [
         'restart': None,
     },
     {
-        'name': 'dos_calc',
+        'name': 'dos_from_relax',
         'type': 'dos',
-        'structure_from': 'relax',  # Connection!
+        'structure_from': 'relax',  # Connection from previous stage
+        'scf_incar': {'encut': 520, 'ediff': 1e-6},
+        'dos_incar': {'nedos': 2000, 'lorbit': 11},
+    },
+    {
+        'name': 'dos_external',
+        'type': 'dos',
+        'structure': adsorbate_structure,  # Explicit StructureData/PK
         'scf_incar': {'encut': 520, 'ediff': 1e-6},
         'dos_incar': {'nedos': 2000, 'lorbit': 11},
     },
 ]
 ```
+
+**DOS structure source:** provide exactly one of `structure_from` or `structure`.
+With `structure`, the stage is independent from previous structure outputs and still
+obeys global `max_concurrent_jobs` limits inside the same WorkGraph.
 
 ---
 
@@ -512,6 +523,7 @@ graph LR
 |------|-------------|---------|
 | `auto` | General mode for structure-bearing bricks: resolves structure from `structure_from` (defaulting to `previous`/`input` when absent) | `'source': 'auto'` → uses `structure_from` or falls back to previous/input |
 | `structure_from` | Reference structure from named stage | `'structure_from': 'relax'` |
+| `structure` | Explicit stage-level structure (`StructureData` or PK) for bricks that support it | `'structure': adsorbate_structure` |
 | `energy_from` | Reference energy from named stage | `'energy_from': 'scf'` |
 | `charge_from` | Bader: reference VASP charge stage | `'charge_from': 'scf'` |
 | `ground_state_from` | Hubbard: reference ground state VASP | `'ground_state_from': 'gs'` |
@@ -630,7 +642,7 @@ warnings = validate_connections(stages)
 | Brick | Input Structure | Output Structure | Output Energy | Output Trajectory | Requires Prior VASP | Chainable |
 |-------|----------------|------------------|---------------|-------------------|---------------------|-----------|
 | **vasp** | Yes | Yes* | Yes | No | No | Via `restart` |
-| **dos** | From stage | No | Yes (SCF) | No | Yes | No |
+| **dos** | From stage or explicit | No | Yes (SCF) | No | Optional (`structure_from`) | No |
 | **batch** | From stage | No | Yes (per-calc) | No | Yes | No |
 | **bader** | From stage | No | No | No | Yes | No |
 | **convergence** | Optional | No | No | No | No | No |

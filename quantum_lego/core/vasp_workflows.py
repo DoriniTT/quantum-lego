@@ -402,7 +402,9 @@ def quick_vasp_sequential(
     Stage Configuration (DOS stages, type='dos'):
         - name (required): Unique stage identifier
         - type: 'dos' - DOS calculation (SCF + DOS)
-        - structure_from (required): Stage name to get structure from
+        - structure_from: Stage name to get structure from
+        - structure: Explicit StructureData or PK
+          (provide exactly one of structure_from or structure)
         - scf_incar (required): INCAR for SCF step (lwave/lcharg forced to True)
         - dos_incar (required): INCAR for DOS step (ismear defaults to -5, lorbit to 11)
         - kpoints_spacing: K-points for SCF (default: base value)

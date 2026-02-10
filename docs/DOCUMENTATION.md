@@ -572,6 +572,47 @@ print("Monitor: verdi process show", pk)
 print_sequential_results(result)
 ```
 
+### Mixed Structure Sources in One WorkGraph
+
+Use `structure_from` for dependency-linked stages and `structure` for independent stages.
+
+```python
+stages = [
+    {
+        'name': 'relax',
+        'type': 'vasp',
+        'incar': {'nsw': 100, 'ibrion': 2, 'isif': 2, 'encut': 520},
+        'restart': None,
+    },
+    {
+        'name': 'dos_relax',
+        'type': 'dos',
+        'structure_from': 'relax',  # from stage output
+        'scf_incar': {'encut': 520, 'ediff': 1e-6},
+        'dos_incar': {'nedos': 3000, 'lorbit': 11, 'ismear': -5},
+    },
+    {
+        'name': 'dos_external',
+        'type': 'dos',
+        'structure': adsorbate_structure,  # explicit StructureData/PK
+        'scf_incar': {'encut': 520, 'ediff': 1e-6},
+        'dos_incar': {'nedos': 3000, 'lorbit': 11, 'ismear': -5},
+    },
+]
+
+result = quick_vasp_sequential(
+    structure=initial_structure,
+    stages=stages,
+    code_label='VASP-6.5.1@localwork',
+    potential_family='PBE',
+    potential_mapping={'Sn': 'Sn_d', 'O': 'O'},
+    options={'resources': {'num_machines': 1, 'num_mpiprocs_per_machine': 8}},
+    max_concurrent_jobs=2,  # global cap across all stage branches
+)
+```
+
+Runnable example: `examples/vasp/run_mixed_dos_sources.py`
+
 ### Connection Types
 
 **`structure_from`**: Get structure output from another stage
@@ -580,6 +621,15 @@ print_sequential_results(result)
     'name': 'dos',
     'type': 'dos',
     'structure_from': 'relax',  # Use relaxed structure
+}
+```
+
+**`structure`**: Provide an explicit structure directly in the stage
+```python
+{
+    'name': 'dos_external',
+    'type': 'dos',
+    'structure': adsorbate_structure,  # StructureData or PK
 }
 ```
 

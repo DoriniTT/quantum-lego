@@ -179,7 +179,7 @@ Pure Python module (no AiiDA dependency) declaring typed inputs/outputs for each
 
 **Port types:** `structure`, `energy`, `misc`, `remote_folder`, `retrieved`, `dos_data`, `projectors`, `bader_charges`, `trajectory`, `convergence`, `file`, `hubbard_responses`, `hubbard_occupation`, `hubbard_result`, `neb_images`
 
-**Source resolution modes:** `auto`, `structure_from`, `charge_from`, `restart`, `ground_state_from`, `response_from`
+**Source resolution modes:** `auto`, `structure_from`, `charge_from`, `restart`, `ground_state_from`, `response_from`, and explicit stage-level `structure` overrides (for bricks that support it, e.g., `vasp`, `dos`)
 
 ### Sequential Workflows
 
@@ -207,10 +207,22 @@ stages = [
         'scf_incar': {'encut': 520, 'ediff': 1e-6},
         'dos_incar': {'nedos': 2000, 'lorbit': 11, 'ismear': -5},
     },
+    {
+        'name': 'dos_external',
+        'type': 'dos',
+        'structure': other_structure,  # explicit StructureData/PK
+        'scf_incar': {'encut': 520, 'ediff': 1e-6},
+        'dos_incar': {'nedos': 2000, 'lorbit': 11, 'ismear': -5},
+    },
 ]
 
 result = quick_vasp_sequential(structure, code_label, stages=stages, ...)
 ```
+
+For DOS stages, provide exactly one of `structure_from` or `structure`.
+`max_concurrent_jobs` limits concurrent jobs across the entire WorkGraph,
+including independent DOS branches with explicit `structure`.
+Reference example: `examples/vasp/run_mixed_dos_sources.py`.
 
 ## Testing
 

@@ -1178,6 +1178,15 @@ class TestValidateConnectionsMissingSourceField:
         with pytest.raises(ValueError, match="structure_from.*missing"):
             validate_connections([relax_stage, dos])
 
+    def test_dos_explicit_structure_bypasses_structure_from(self, relax_stage):
+        dos = {
+            'name': 'dos', 'type': 'dos',
+            'structure': object(),
+            'scf_incar': {'encut': 520}, 'dos_incar': {'nedos': 3000},
+        }
+        warnings = validate_connections([relax_stage, dos])
+        assert warnings == []
+
     def test_batch_missing_structure_from_rejected(self, relax_stage):
         batch = {
             'name': 'batch', 'type': 'batch',

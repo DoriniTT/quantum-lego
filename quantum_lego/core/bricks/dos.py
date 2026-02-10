@@ -30,15 +30,28 @@ def validate_stage(stage: Dict[str, Any], stage_names: Set[str]) -> None:
         raise ValueError(f"Stage '{name}': DOS stages require 'scf_incar'")
     if 'dos_incar' not in stage:
         raise ValueError(f"Stage '{name}': DOS stages require 'dos_incar'")
-    if 'structure_from' not in stage:
-        raise ValueError(f"Stage '{name}': DOS stages require 'structure_from'")
 
-    structure_from = stage['structure_from']
-    if structure_from not in stage_names:
+    has_structure = 'structure' in stage
+    has_structure_from = 'structure_from' in stage
+
+    if has_structure and has_structure_from:
         raise ValueError(
-            f"Stage '{name}' structure_from='{structure_from}' must reference "
-            f"a previous stage name"
+            f"Stage '{name}': DOS stages accept either 'structure' or "
+            f"'structure_from', not both"
         )
+    if not has_structure and not has_structure_from:
+        raise ValueError(
+            f"Stage '{name}': DOS stages require a structure source "
+            f"('structure' or 'structure_from')"
+        )
+
+    if has_structure_from:
+        structure_from = stage['structure_from']
+        if structure_from not in stage_names:
+            raise ValueError(
+                f"Stage '{name}' structure_from='{structure_from}' must reference "
+                f"a previous stage name"
+            )
 
 
 def create_stage_tasks(
@@ -67,9 +80,13 @@ def create_stage_tasks(
     base_kpoints_spacing = context['base_kpoints_spacing']
     clean_workdir = context['clean_workdir']
 
-    # Resolve structure from referenced stage
-    structure_from = stage['structure_from']
-    input_structure = resolve_structure_from(structure_from, context)
+    # Resolve structure either from explicit stage input or from a previous stage.
+    if 'structure' in stage:
+        explicit = stage['structure']
+        input_structure = orm.load_node(explicit) if isinstance(explicit, int) else explicit
+    else:
+        structure_from = stage['structure_from']
+        input_structure = resolve_structure_from(structure_from, context)
 
     # Get BandsWorkChain and wrap as task
     BandsWorkChain = WorkflowFactory('vasp.v2.bands')

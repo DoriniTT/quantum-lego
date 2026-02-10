@@ -190,6 +190,13 @@ stages = [
         'scf_incar': {'encut': 520, 'ediff': 1e-6},
         'dos_incar': {'nedos': 2000, 'lorbit': 11, 'ismear': -5},
     },
+    {
+        'name': 'dos_external',
+        'type': 'dos',
+        'structure': alt_structure,  # Explicit StructureData/PK
+        'scf_incar': {'encut': 520, 'ediff': 1e-6},
+        'dos_incar': {'nedos': 2000, 'lorbit': 11, 'ismear': -5},
+    },
 ]
 
 result = quick_vasp_sequential(
@@ -204,6 +211,12 @@ result = quick_vasp_sequential(
 
 print_sequential_results(result)
 ```
+
+For DOS stages, provide exactly one structure source:
+- `structure_from='some_stage'`, or
+- `structure=<StructureData|PK>`
+
+Runnable example: `examples/vasp/run_mixed_dos_sources.py`
 
 ## Understanding the Brick System
 
@@ -250,7 +263,7 @@ Bricks connect via typed ports:
 {
     'name': 'dos',
     'type': 'dos',
-    'structure_from': 'relax',  # ✓ Valid connection
+    'structure_from': 'relax',  # ✓ Valid connection (or use 'structure')
 }
 ```
 
@@ -450,7 +463,7 @@ stages = [
     {
         'name': 'dos',
         'type': 'dos',
-        'structure_from': 'relax',
+        'structure_from': 'relax',  # or 'structure': another_structure
         'scf_incar': {'encut': 500, 'ediff': 1e-6},
         'dos_incar': {'nedos': 2000, 'lorbit': 11, 'ismear': -5},
     },

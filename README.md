@@ -110,6 +110,56 @@ pk = quick_dos(
 - SCF: `lwave=True`, `lcharg=True` (outputs wavefunctions and charge_density)
 - DOS: `icharg=11`, `istart=1` (non-SCF from existing charge/wavefunction)
 
+#### `quick_vasp_sequential()`
+
+Submit a multi-stage WorkGraph where dependencies are defined per stage.
+
+For DOS stages, you can now provide the structure source in two ways:
+- `structure_from='relax_stage_name'` (from a previous stage), or
+- `structure=<StructureData|PK>` (explicit structure for that stage).
+
+Exactly one of `structure_from` or `structure` must be provided in DOS stages.
+
+```python
+from quantum_lego import quick_vasp_sequential
+
+stages = [
+    {
+        'name': 'relax',
+        'type': 'vasp',
+        'incar': {'nsw': 100, 'ibrion': 2, 'isif': 2, 'encut': 520},
+        'restart': None,
+    },
+    {
+        'name': 'dos_relaxed',
+        'type': 'dos',
+        'structure_from': 'relax',  # from previous stage
+        'scf_incar': {'encut': 520, 'ediff': 1e-6},
+        'dos_incar': {'nedos': 2000, 'lorbit': 11, 'ismear': -5},
+    },
+    {
+        'name': 'dos_alt_structure',
+        'type': 'dos',
+        'structure': alt_structure,  # explicit StructureData
+        'scf_incar': {'encut': 520, 'ediff': 1e-6},
+        'dos_incar': {'nedos': 2000, 'lorbit': 11, 'ismear': -5},
+    },
+]
+
+result = quick_vasp_sequential(
+    structure=initial_structure,   # seed structure for stage 1 / 'input'
+    stages=stages,
+    code_label='VASP-6.5.1@localwork',
+    potential_family='PBE',
+    potential_mapping={'Sn': 'Sn_d', 'O': 'O'},
+    options={'resources': {'num_machines': 1, 'num_mpiprocs_per_machine': 8}},
+    max_concurrent_jobs=2,         # global cap inside this WorkGraph
+    name='mixed_structure_dos',
+)
+```
+
+See `examples/vasp/run_mixed_dos_sources.py` for a runnable version.
+
 ### Result Functions
 
 #### `get_results(pk)`

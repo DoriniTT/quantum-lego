@@ -793,13 +793,17 @@ def validate_connections(stages: list) -> list:
 
         # Check every required input can be satisfied
         for input_name, input_port in ports['inputs'].items():
+            source_key = input_port['source']
+
+            # Explicit per-stage structure overrides connection-based structure sourcing.
+            # Used by DOS/VASP stages that provide a direct StructureData/PK.
+            if input_name == 'structure' and stage.get('structure') is not None:
+                continue
+
             if input_port.get('required', True) is False:
                 # Optional port — skip if source field not present
-                source_key = input_port['source']
                 if stage.get(source_key) is None:
                     continue
-
-            source_key = input_port['source']
 
             # ── Handle 'auto' source (VASP structure) ──
             if source_key == 'auto':

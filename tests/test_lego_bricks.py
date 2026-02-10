@@ -304,10 +304,30 @@ class TestDosValidateStage:
         with pytest.raises(ValueError, match="dos_incar"):
             self._validate(stage, stage_names={'relax'})
 
-    def test_missing_structure_from_raises(self):
+    def test_missing_structure_source_raises(self):
         stage = {'name': 'dos', 'scf_incar': {'encut': 400}, 'dos_incar': {'nedos': 2000}}
-        with pytest.raises(ValueError, match="structure_from"):
+        with pytest.raises(ValueError, match="structure source"):
             self._validate(stage)
+
+    def test_explicit_structure_passes(self):
+        stage = {
+            'name': 'dos',
+            'scf_incar': {'encut': 400},
+            'dos_incar': {'nedos': 2000},
+            'structure': object(),
+        }
+        self._validate(stage)
+
+    def test_structure_and_structure_from_raises(self):
+        stage = {
+            'name': 'dos',
+            'scf_incar': {'encut': 400},
+            'dos_incar': {'nedos': 2000},
+            'structure': object(),
+            'structure_from': 'relax',
+        }
+        with pytest.raises(ValueError, match="either 'structure' or 'structure_from'"):
+            self._validate(stage, stage_names={'relax'})
 
     def test_structure_from_unknown_raises(self):
         stage = {
