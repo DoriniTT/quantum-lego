@@ -1,15 +1,21 @@
 ---
+name: Issue Triage Agent
+description: Automatically triages unlabeled issues by analyzing content and applying appropriate labels
 timeout-minutes: 5
 strict: true
 engine: copilot
 on:
-  #schedule: "0 14 * * 1-5"
+  #schedule:
+  #- cron: 0 14 * * 1-5
   workflow_dispatch:
 permissions:
-  contents: read
   issues: read
+network:
+  allowed:
+  - defaults
+  - github
 imports:
-  - shared/reporting.md
+- shared/reporting.md
 steps:
   - name: Disable sparse checkout
     run: |
@@ -22,6 +28,7 @@ safe-outputs:
   add-labels:
     allowed: [bug, feature, enhancement, documentation, question, help-wanted, good-first-issue]
   add-comment: {}
+tracker-id: issue-triage
 ---
 # Issue Triage Agent
 

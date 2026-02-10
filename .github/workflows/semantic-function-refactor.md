@@ -6,8 +6,12 @@ permissions:
   contents: read
   issues: read
   pull-requests: read
+network:
+  allowed:
+  - defaults
+  - github
 imports:
-- github/gh-aw/.github/workflows/shared/reporting.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
+- shared/reporting.md
 steps:
   - name: Disable sparse checkout
     run: |
@@ -37,8 +41,8 @@ tools:
   bash:
   - find . -name '*.py' ! -name 'test_*.py' ! -path '*/tests/*' ! -path '*/.venv/*' ! -path '*/venv/*' -type f
   - find . -type f -name '*.py' ! -name 'test_*.py' ! -path '*/tests/*'
-  - find src/ -maxdepth 1 -ls 2>/dev/null || find . -maxdepth 2 -name '*.py' -ls
-  - find aiida_vasp/ -maxdepth 1 -ls 2>/dev/null || true
+  - find quantum_lego/ -maxdepth 2 -ls 2>/dev/null || find . -maxdepth 2 -name '*.py' -ls
+  - find quantum_lego/core/ -maxdepth 1 -ls 2>/dev/null || true
   - wc -l **/*.py
   - head -n * **/*.py
   - grep -r 'def ' . --include='*.py' ! -path '*/tests/*' ! -path '*/.venv/*'
@@ -153,16 +157,13 @@ For each discovered Python file:
 
 Example structure:
 ```
-File: aiida_vasp/workflows/base.py
-Module: aiida_vasp.workflows.base
+File: quantum_lego/core/workgraph.py
+Module: quantum_lego.core.workgraph
 Functions:
-  - validate_inputs(inputs: dict) -> bool
-  - process_results(node: Node) -> dict
+  - _build_sequential_workgraph(structure, code, ...) -> WorkGraph
+  - _validate_stages(stages) -> None
 Classes:
-  - BaseWorkChain(WorkChain):
-      Methods:
-        - setup(self) -> None
-        - run_calculation(self) -> ProcessNode
+  - (functions-based, no classes in this module)
 ```
 
 ### 5. Semantic Clustering Analysis
@@ -258,12 +259,12 @@ Create a comprehensive issue with findings:
 
 **Issue**: Functions that don't match their file's primary purpose
 
-#### Example: Validation in Compiler Module
+#### Example: Utility in Workflow Module
 
-- **File**: `aiida_vasp/workflows/compiler.py`
-- **Function**: `validate_config(cfg: dict) -> bool`
-- **Issue**: Validation function in compiler module
-- **Recommendation**: Move to `aiida_vasp/workflows/validation.py`
+- **File**: `quantum_lego/core/workgraph.py`
+- **Function**: `_get_stage_structure(stage, ...)`
+- **Issue**: Utility function in main workflow module
+- **Recommendation**: Move to `quantum_lego/core/workflow_utils.py`
 - **Estimated Impact**: Improved code organization
 
 [... more outliers ...]
@@ -272,25 +273,12 @@ Create a comprehensive issue with findings:
 
 **Issue**: Functions with similar or identical implementations
 
-#### Example: String Processing Duplicates
+#### Example: Result Extraction Duplicates
 
-- **Occurrence 1**: `aiida_vasp/utils/helpers.py:process_string(s: str) -> str`
-- **Occurrence 2**: `aiida_vasp/utils/text.py:clean_string(s: str) -> str`
-- **Similarity**: 90% code similarity
-- **Code Comparison**:
-  ```python
-  # helpers.py
-  def process_string(s: str) -> str:
-      s = s.strip()
-      s = s.lower()
-      return s
-
-  # text.py
-  def clean_string(s: str) -> str:
-      s = s.strip()
-      return s.lower()
-  ```
-- **Recommendation**: Consolidate into single function in `aiida_vasp/utils/strings.py`
+- **Occurrence 1**: `quantum_lego/core/results.py:get_results(pk)`
+- **Occurrence 2**: `quantum_lego/core/utils.py:get_status(pk)`
+- **Similarity**: Check for overlapping logic
+- **Recommendation**: Consolidate shared logic into common utility
 - **Estimated Impact**: Reduced code duplication, easier maintenance
 
 [... more duplicates ...]
@@ -448,7 +436,7 @@ Args: { "path": "${{ github.workspace }}" }
 ### Symbol Overview
 ```
 Tool: get_symbols_overview
-Args: { "file_path": "aiida_vasp/workflows/base.py" }
+Args: { "file_path": "quantum_lego/core/workgraph.py" }
 ```
 
 ### Find Similar Symbols
@@ -466,13 +454,13 @@ Args: { "pattern": "def.*config.*->.*:", "workspace": "${{ github.workspace }}" 
 ### Find References
 ```
 Tool: find_referencing_symbols
-Args: { "symbol_name": "run_workflow", "file_path": "aiida_vasp/workflows/base.py" }
+Args: { "symbol_name": "quick_vasp", "file_path": "quantum_lego/core/workgraph.py" }
 ```
 
 ### Read File Content
 ```
 Tool: read_file
-Args: { "file_path": "aiida_vasp/workflows/base.py" }
+Args: { "file_path": "quantum_lego/core/workgraph.py" }
 ```
 
 ## Success Criteria

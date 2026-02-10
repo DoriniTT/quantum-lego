@@ -8,9 +8,12 @@ permissions:
   contents: read
   issues: read
   pull-requests: read
+network:
+  allowed:
+  - defaults
+  - github
 imports:
-- github/gh-aw/.github/workflows/shared/reporting.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
-- github/gh-aw/.github/workflows/shared/safe-output-app.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
+- shared/reporting.md
 steps:
   - name: Disable sparse checkout
     run: |
@@ -48,7 +51,6 @@ tools:
   - python
 tracker-id: daily-file-diet
 ---
-{{#runtime-import? .github/shared-instructions.md}}
 
 # Daily File Diet Agent 🏋️
 

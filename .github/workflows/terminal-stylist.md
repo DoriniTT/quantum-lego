@@ -2,11 +2,22 @@
 name: Terminal Stylist
 description: Analyzes and improves console output styling and formatting in the codebase
 on:
+  #schedule:
+  #- cron: 0 10 * * 1-5
   workflow_dispatch:
-  #schedule: daily
 
 permissions:
   contents: read
+  issues: read
+  pull-requests: read
+
+network:
+  allowed:
+  - defaults
+  - github
+
+imports:
+- shared/reporting.md
 
 engine: copilot
 
@@ -23,17 +34,22 @@ steps:
 tools:
   serena: ["python"]
   github:
-    toolsets: [repos]
-  edit:
+    toolsets: [default]
+  edit: null
   bash:
-    - "*"
+  - find . -name '*.py' ! -path '*/test_*' ! -path '*/__pycache__/*' ! -path '*/venv/*' ! -path '*/.venv/*' -type f
+  - grep -r 'print\|console\|rich\|questionary\|logging' --include='*.py'
+  - cat **/*.py
+  - wc -l **/*.py
 
 safe-outputs:
   create-discussion:
     category: "general"
     max: 1
     close-older-discussions: true
+
 source: github/gh-aw/.github/workflows/terminal-stylist.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
+tracker-id: terminal-stylist
 ---
 
 # Terminal Stylist - Console Output Analysis

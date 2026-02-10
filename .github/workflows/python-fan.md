@@ -14,7 +14,7 @@ network:
   - github
   - pypi
 imports:
-- github/gh-aw/.github/workflows/shared/reporting.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
+- shared/reporting.md
 safe-outputs:
   create-discussion:
     category: general
