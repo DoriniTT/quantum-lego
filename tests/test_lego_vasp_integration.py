@@ -30,7 +30,8 @@ if not AIIDA_AVAILABLE:
 from aiida import orm  # noqa: E402
 from aiida_workgraph import WorkGraph, task  # noqa: E402
 
-from quantum_lego.core.tasks import extract_energy, compute_dynamics  # noqa: E402
+from quantum_lego.core.common.utils import extract_total_energy  # noqa: E402
+from quantum_lego.core.tasks import compute_dynamics  # noqa: E402
 from quantum_lego.core.tasks import prepare_poscar_with_velocities  # noqa: E402
 
 
@@ -41,11 +42,11 @@ from quantum_lego.core.tasks import prepare_poscar_with_velocities  # noqa: E402
 @pytest.mark.tier2
 @pytest.mark.requires_aiida
 class TestVaspExtractEnergy:
-    """Test the extract_energy calcfunction with mock misc data."""
+    """Test the extract_total_energy calcfunction with mock misc data."""
 
     def test_extract_energy_from_total_energies(self):
-        """extract_energy should find energy_extrapolated inside total_energies."""
-        misc = orm.Dict(dict={
+        """extract_total_energy should find energy_extrapolated inside total_energies."""
+        energies = orm.Dict(dict={
             'total_energies': {
                 'energy_extrapolated': -10.12345,
                 'energy_no_entropy': -10.12300,
@@ -53,7 +54,7 @@ class TestVaspExtractEnergy:
         })
 
         wg = WorkGraph(name='test_extract_energy')
-        wg.add_task(extract_energy, name='extract', misc=misc)
+        wg.add_task(extract_total_energy, name='extract', energies=energies)
         wg.run()
 
         assert wg.tasks['extract'].state == 'FINISHED'
@@ -62,38 +63,70 @@ class TestVaspExtractEnergy:
         assert abs(float(result) - (-10.12345)) < 1e-8
 
     def test_extract_energy_flat_keys(self):
-        """extract_energy should work with flat energy keys (no total_energies nesting)."""
-        misc = orm.Dict(dict={'energy_extrapolated': -5.678})
+        """extract_total_energy should work with flat energy keys (no total_energies nesting)."""
+        energies = orm.Dict(dict={'energy_extrapolated': -5.678})
 
         wg = WorkGraph(name='test_extract_energy_flat')
-        wg.add_task(extract_energy, name='extract', misc=misc)
+        wg.add_task(extract_total_energy, name='extract', energies=energies)
         wg.run()
 
         result = wg.tasks['extract'].outputs.result.value
         assert abs(float(result) - (-5.678)) < 1e-8
 
     def test_extract_energy_fallback_keys(self):
-        """extract_energy should try energy_no_entropy, then energy as fallbacks."""
-        misc = orm.Dict(dict={
+        """extract_total_energy should try energy_no_entropy, then energy as fallbacks."""
+        energies = orm.Dict(dict={
             'total_energies': {'energy_no_entropy': -7.0}
         })
 
         wg = WorkGraph(name='test_extract_energy_fallback')
-        wg.add_task(extract_energy, name='extract', misc=misc)
+        wg.add_task(extract_total_energy, name='extract', energies=energies)
         wg.run()
 
         result = wg.tasks['extract'].outputs.result.value
         assert abs(float(result) - (-7.0)) < 1e-8
 
     def test_extract_energy_missing_raises(self):
-        """extract_energy should fail when no recognized key is found."""
-        misc = orm.Dict(dict={'some_other_key': 42})
+        """extract_total_energy should fail when no recognized key is found."""
+        energies = orm.Dict(dict={'some_other_key': 42})
 
         wg = WorkGraph(name='test_extract_energy_missing')
-        wg.add_task(extract_energy, name='extract', misc=misc)
+        wg.add_task(extract_total_energy, name='extract', energies=energies)
         wg.run()
 
         assert wg.tasks['extract'].state == 'FAILED'
+
+    def test_extract_energy_outcar_fallback(self):
+        """extract_total_energy should parse OUTCAR when misc keys are missing."""
+        # Create mock OUTCAR content
+        outcar_content = """
+ free  energy   TOTEN  =      -832.63657516 eV
+
+ energy  without entropy=     -832.63657516  energy(sigma->0) =     -832.63657516
+"""
+        # Create a FolderData with OUTCAR
+        from aiida.orm import FolderData
+        import tempfile
+        import os
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            outcar_path = os.path.join(tmpdir, 'OUTCAR')
+            with open(outcar_path, 'w') as f:
+                f.write(outcar_content)
+
+            retrieved = FolderData()
+            retrieved.put_object_from_filelike(open(outcar_path, 'rb'), 'OUTCAR')
+
+        energies = orm.Dict(dict={'some_other_key': 42})
+
+        wg = WorkGraph(name='test_extract_energy_outcar')
+        wg.add_task(extract_total_energy, name='extract', energies=energies, retrieved=retrieved)
+        wg.run()
+
+        assert wg.tasks['extract'].state == 'FINISHED'
+        result = wg.tasks['extract'].outputs.result.value
+        assert isinstance(result, orm.Float)
+        assert abs(float(result) - (-832.63657516)) < 1e-6
 
 
 @pytest.mark.tier2

@@ -10,7 +10,7 @@ from aiida.plugins import WorkflowFactory
 from aiida_workgraph import task
 
 from .connections import AIMD_PORTS as PORTS  # noqa: F401
-from ..tasks import extract_energy
+from ..common.utils import extract_total_energy
 
 
 def _looks_fractional_trajectory_positions(positions, cells, tol: float = 0.25) -> bool:
@@ -526,9 +526,9 @@ def create_stage_tasks(wg, stage, stage_name, context):
 
     # Add energy extraction task
     energy_task = wg.add_task(
-        extract_energy,
+        extract_total_energy,
         name=f'energy_{stage_name}',
-        misc=vasp_task.outputs.misc,
+        energies=vasp_task.outputs.misc,
         retrieved=vasp_task.outputs.retrieved,
     )
 

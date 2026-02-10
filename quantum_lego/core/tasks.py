@@ -1,6 +1,7 @@
 """Calcfunction tasks for the lego module."""
 
 import re
+import warnings
 
 from aiida import orm
 from aiida_workgraph import task
@@ -148,6 +149,11 @@ def extract_energy(misc: orm.Dict, retrieved: orm.FolderData = None) -> orm.Floa
     """
     Extract total energy from VASP misc output or OUTCAR.
 
+    .. deprecated::
+        This function is deprecated. Use `extract_total_energy` from
+        `quantum_lego.core.common.utils` instead, which provides the same
+        functionality with better integration across the codebase.
+
     Args:
         misc: VASP misc output Dict containing energy data
         retrieved: VASP retrieved FolderData (optional) to parse OUTCAR if misc fails
@@ -155,6 +161,13 @@ def extract_energy(misc: orm.Dict, retrieved: orm.FolderData = None) -> orm.Floa
     Returns:
         Total energy as Float (eV)
     """
+    warnings.warn(
+        "extract_energy is deprecated and will be removed in a future version. "
+        "Use extract_total_energy from quantum_lego.core.common.utils instead.",
+        DeprecationWarning,
+        stacklevel=2
+    )
+
     misc_dict = misc.get_dict()
 
     # Navigate to total_energies if present

@@ -11,7 +11,7 @@ from aiida import orm
 from aiida.plugins import WorkflowFactory
 from aiida_workgraph import WorkGraph, task
 
-from .tasks import extract_energy
+from .common.utils import extract_total_energy
 from .utils import prepare_restart_settings
 from .common.utils import deep_merge_dicts
 from .workflow_utils import (
@@ -154,9 +154,9 @@ def quick_vasp(
 
     # Add energy extraction task
     energy_task = wg.add_task(
-        extract_energy,
+        extract_total_energy,
         name='extract_energy',
-        misc=vasp_task.outputs.misc,
+        energies=vasp_task.outputs.misc,
         retrieved=vasp_task.outputs.retrieved,
     )
 
@@ -309,9 +309,9 @@ def quick_vasp_batch(
         # Add energy extraction task
         energy_task_name = f'energy_{key}'
         wg.add_task(
-            extract_energy,
+            extract_total_energy,
             name=energy_task_name,
-            misc=vasp_task.outputs.misc,
+            energies=vasp_task.outputs.misc,
             retrieved=vasp_task.outputs.retrieved,
         )
 

@@ -7,6 +7,7 @@ Centralizing these functions reduces code duplication and ensures consistent beh
 
 import copy
 import logging
+import re
 from collections import Counter
 from functools import reduce
 from math import gcd
@@ -462,23 +463,50 @@ def get_metal_elements(atom_counts: dict) -> list:
     return sorted(element for element in atom_counts if element != 'O')
 
 @task.calcfunction
-def extract_total_energy(energies: orm.Dict) -> orm.Float:
+def extract_total_energy(energies: orm.Dict, retrieved: orm.FolderData = None) -> orm.Float:
     """
     Extract total energy from VASP energies output.
-    
+
+    This function consolidates energy extraction logic from VASP misc output,
+    with an optional fallback to parsing the OUTCAR file if the misc output
+    does not contain recognizable energy keys.
+
     Args:
         energies: Dictionary containing energy outputs from VASP (from misc output)
-    
+        retrieved: Optional VASP retrieved FolderData to parse OUTCAR if misc fails
+
     Returns:
-        Total energy as Float
+        Total energy as Float (eV)
+
+    Raises:
+        ValueError: If no recognizable energy key is found in misc or OUTCAR
+
+    Example:
+        >>> # Standard usage with misc output
+        >>> energy = extract_total_energy(energies=misc_dict)
+        >>>
+        >>> # With OUTCAR fallback
+        >>> energy = extract_total_energy(energies=misc_dict, retrieved=retrieved_folder)
     """
     energy_dict = energies.get_dict()
     if 'total_energies' in energy_dict:
         energy_dict = energy_dict['total_energies']
 
+    # Try multiple keys in order of preference
     for key in ('energy_extrapolated', 'energy_no_entropy', 'energy'):
         if key in energy_dict:
             return orm.Float(energy_dict[key])
+
+    # If no recognized key found in misc, try to parse from retrieved OUTCAR
+    if retrieved is not None:
+        try:
+            content = retrieved.get_object_content('OUTCAR')
+            # Look for "free  energy   TOTEN  =       -832.63657516 eV"
+            matches = re.findall(r'free\s+energy\s+TOTEN\s+=\s+([-\d.]+)', content)
+            if matches:
+                return orm.Float(float(matches[-1]))
+        except Exception:
+            pass
 
     available = ', '.join(sorted(energy_dict.keys()))
     raise ValueError(f'Unable to find total energy in VASP outputs. Available keys: {available}')
