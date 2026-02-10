@@ -578,7 +578,8 @@ Some connections require specific INCAR settings and retrieved files:
     'lwave': True,
     'lcharg': True,
 }
-'retrieve': ['OUTCAR']  # For occupation numbers
+# OUTCAR must be available in the retrieved files for occupation numbers.
+# This is satisfied by the default VASP retrieve list (DEFAULT_VASP_RETRIEVE).
 ```
 
 ---
