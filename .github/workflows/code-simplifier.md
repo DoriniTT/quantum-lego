@@ -2,7 +2,7 @@
 on:
   #schedule: daily
   skip-if-match: is:pr is:open in:title "[code-simplifier]"
-engine: claude
+engine: copilot
 permissions:
   contents: read
   issues: read

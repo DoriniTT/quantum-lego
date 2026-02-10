@@ -21,7 +21,7 @@ safe-outputs:
     max: 1
     title-prefix: "[typist] "
 description: "Analyzes Python type hint usage patterns and identifies opportunities for better type safety and code improvements"
-engine: claude
+engine: copilot
 name: "Typist - Python Type Analysis"
 source: github/gh-aw/.github/workflows/typist.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
 strict: true

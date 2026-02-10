@@ -28,7 +28,7 @@ safe-outputs:
     max: 1
     title-prefix: "[refactor] "
 description: Analyzes Python codebase daily to identify opportunities for semantic function extraction and refactoring
-engine: claude
+engine: copilot
 name: Semantic Function Refactoring
 source: github/gh-aw/.github/workflows/semantic-function-refactor.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
 strict: true

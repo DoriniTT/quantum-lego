@@ -27,7 +27,7 @@ safe-outputs:
     max: 1
     title-prefix: "[file-diet] "
 description: Analyzes the largest Python source file daily and creates an issue to refactor it into smaller files if it exceeds the healthy size threshold
-engine: claude
+engine: copilot
 name: Daily File Diet
 source: github/gh-aw/.github/workflows/daily-file-diet.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
 strict: true

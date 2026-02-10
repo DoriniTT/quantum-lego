@@ -1,7 +1,7 @@
 ---
 timeout-minutes: 5
 strict: true
-engine: claude
+engine: copilot
 on:
   #schedule: "0 14 * * 1-5"
   workflow_dispatch:

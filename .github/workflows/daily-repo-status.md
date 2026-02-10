@@ -5,7 +5,7 @@ description: |
   engaging GitHub issues with productivity insights, community highlights,
   and project recommendations.
 
-engine: claude
+engine: copilot
 
 on:
   #schedule: daily
