@@ -126,7 +126,7 @@ graph LR
     INPUT[Initial Structure] -->|structure| RELAX[VASP Relax<br/>nsw=100]
     RELAX -->|structure| SCF[VASP SCF<br/>nsw=0]
     RELAX -->|remote_folder| SCF
-    SCF -->|structure| STATIC[VASP Static<br/>High precision]
+    RELAX -->|structure| STATIC[VASP Static<br/>High precision]
     SCF -->|remote_folder<br/>WAVECAR/CHGCAR| STATIC
 
     RELAX -.->|energy| OUT1[Energy 1]
