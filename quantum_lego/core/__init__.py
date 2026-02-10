@@ -208,6 +208,15 @@ from .utils import (
     list_calculations,
     get_restart_info,
 )
+from .types import (
+    ResourceDict,
+    SchedulerOptions,
+    StageContext,
+    StageTasksResult,
+    VaspResults,
+    DosResults,
+    BatchResults,
+)
 
 
 __all__ = [
@@ -240,4 +249,12 @@ __all__ = [
     'export_files',
     'list_calculations',
     'get_restart_info',
+    # Type definitions
+    'ResourceDict',
+    'SchedulerOptions',
+    'StageContext',
+    'StageTasksResult',
+    'VaspResults',
+    'DosResults',
+    'BatchResults',
 ]

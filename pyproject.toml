@@ -29,6 +29,50 @@ dependencies = [
 where = ["."]
 include = ["quantum_lego*"]
 
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false  # Start permissive
+disallow_any_explicit = false  # Allow explicit Any
+disallow_any_generics = false  # Don't require List[T] yet
+warn_redundant_casts = true
+warn_unused_ignores = true
+check_untyped_defs = true
+no_implicit_optional = true
+
+# Ignore AiiDA modules (no stubs)
+[[tool.mypy.overrides]]
+module = "aiida.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "aiida_vasp.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "aiida_workgraph.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "ase.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "pymatgen.*"
+ignore_missing_imports = true
+
+# Gradually enable strict checking for new modules
+[[tool.mypy.overrides]]
+module = "quantum_lego.core.types"
+disallow_untyped_defs = true
+disallow_any_explicit = true
+warn_return_any = true
+
+[[tool.mypy.overrides]]
+module = "quantum_lego.core.console"
+disallow_untyped_defs = true  # Already 100% typed!
+
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = "-ra -q"

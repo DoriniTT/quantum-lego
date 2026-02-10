@@ -3,15 +3,18 @@
 Handles DOS calculation stages using BandsWorkChain (vasp.v2.bands).
 """
 
+from typing import Dict, Set, Any
+
 from aiida import orm
 from aiida.common.links import LinkType
 from aiida.plugins import WorkflowFactory
-from aiida_workgraph import task
+from aiida_workgraph import task, WorkGraph
 from .connections import DOS_PORTS as PORTS  # noqa: F401
 from ..retrieve_defaults import build_vasp_retrieve
+from ..types import StageContext, StageTasksResult, DosResults
 
 
-def validate_stage(stage: dict, stage_names: set) -> None:
+def validate_stage(stage: Dict[str, Any], stage_names: Set[str]) -> None:
     """Validate a DOS stage configuration.
 
     Args:
@@ -38,7 +41,12 @@ def validate_stage(stage: dict, stage_names: set) -> None:
         )
 
 
-def create_stage_tasks(wg, stage, stage_name, context):
+def create_stage_tasks(
+    wg: WorkGraph,
+    stage: Dict[str, Any],
+    stage_name: str,
+    context: StageContext
+) -> StageTasksResult:
     """Create DOS stage tasks in the WorkGraph.
 
     Args:
@@ -159,7 +167,12 @@ def create_stage_tasks(wg, stage, stage_name, context):
     }
 
 
-def expose_stage_outputs(wg, stage_name, stage_tasks_result, namespace_map=None):
+def expose_stage_outputs(
+    wg: WorkGraph,
+    stage_name: str,
+    stage_tasks_result: StageTasksResult,
+    namespace_map: Dict[str, str] = None
+) -> None:
     """Expose DOS stage outputs on the WorkGraph.
 
     Args:
@@ -251,8 +264,12 @@ def expose_stage_outputs(wg, stage_name, stage_tasks_result, namespace_map=None)
             pass
 
 
-def get_stage_results(wg_node, wg_pk: int, stage_name: str,
-                      namespace_map: dict = None) -> dict:
+def get_stage_results(
+    wg_node: Any,
+    wg_pk: int,
+    stage_name: str,
+    namespace_map: Dict[str, str] = None
+) -> DosResults:
     """Extract results from a DOS stage in a sequential workflow.
 
     Args:
@@ -371,7 +388,7 @@ def get_stage_results(wg_node, wg_pk: int, stage_name: str,
     return result
 
 
-def _extract_from_bands_workchain(wg_node, stage_name: str, result: dict) -> None:
+def _extract_from_bands_workchain(wg_node: Any, stage_name: str, result: Dict[str, Any]) -> None:
     """Extract DOS stage results by traversing to BandsWorkChain.
 
     Args:
@@ -401,7 +418,7 @@ def _extract_from_bands_workchain(wg_node, stage_name: str, result: dict) -> Non
                 _extract_from_bands_children(child_node, result)
 
 
-def _extract_from_bands_children(bands_node, result: dict) -> None:
+def _extract_from_bands_children(bands_node: Any, result: Dict[str, Any]) -> None:
     """Extract outputs from BandsWorkChain's child workchains.
 
     Args:
@@ -440,7 +457,7 @@ def _extract_from_bands_children(bands_node, result: dict) -> None:
                     result['files'] = outputs.retrieved
 
 
-def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None:
+def print_stage_results(index: int, stage_name: str, stage_result: Dict[str, Any]) -> None:
     """Print formatted results for a DOS stage.
 
     Args:

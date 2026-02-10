@@ -3,18 +3,19 @@
 Handles batch stages: multiple parallel VASP calculations with varying parameters.
 """
 
-import typing as t
+from typing import Dict, Set, Any
 
 from aiida import orm
 from aiida.common.links import LinkType
 from aiida.plugins import WorkflowFactory
-from aiida_workgraph import task
+from aiida_workgraph import task, WorkGraph
 
 from .connections import BATCH_PORTS as PORTS  # noqa: F401
 from ..common.utils import extract_total_energy, deep_merge_dicts
+from ..types import StageContext, StageTasksResult, BatchResults
 
 
-def validate_stage(stage: dict, stage_names: set) -> None:
+def validate_stage(stage: Dict[str, Any], stage_names: Set[str]) -> None:
     """Validate a batch stage configuration.
 
     Args:
@@ -43,7 +44,12 @@ def validate_stage(stage: dict, stage_names: set) -> None:
         )
 
 
-def create_stage_tasks(wg, stage, stage_name, context):
+def create_stage_tasks(
+    wg: WorkGraph,
+    stage: Dict[str, Any],
+    stage_name: str,
+    context: StageContext
+) -> StageTasksResult:
     """Create batch stage tasks in the WorkGraph.
 
     Args:
@@ -143,7 +149,12 @@ def create_stage_tasks(wg, stage, stage_name, context):
     }
 
 
-def expose_stage_outputs(wg, stage_name, stage_tasks_result, namespace_map=None):
+def expose_stage_outputs(
+    wg: WorkGraph,
+    stage_name: str,
+    stage_tasks_result: StageTasksResult,
+    namespace_map: Dict[str, str] = None
+) -> None:
     """Expose batch stage outputs on the WorkGraph.
 
     Args:
@@ -178,8 +189,12 @@ def expose_stage_outputs(wg, stage_name, stage_tasks_result, namespace_map=None)
                     vasp_task.outputs.retrieved)
 
 
-def get_stage_results(wg_node, wg_pk: int, stage_name: str,
-                      namespace_map: dict = None) -> dict:
+def get_stage_results(
+    wg_node: Any,
+    wg_pk: int,
+    stage_name: str,
+    namespace_map: Dict[str, str] = None
+) -> BatchResults:
     """Extract results from a batch stage in a sequential workflow.
 
     Args:
@@ -308,7 +323,9 @@ def get_stage_results(wg_node, wg_pk: int, stage_name: str,
 
 
 def _extract_batch_stage_from_workgraph(
-    wg_node, stage_name: str, result: dict
+    wg_node: Any,
+    stage_name: str,
+    result: Dict[str, Any]
 ) -> None:
     """Extract batch stage results by traversing WorkGraph links.
 
@@ -378,7 +395,7 @@ def _extract_batch_stage_from_workgraph(
         result['calculations'][calc_label] = calc_result
 
 
-def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None:
+def print_stage_results(index: int, stage_name: str, stage_result: Dict[str, Any]) -> None:
     """Print formatted results for a batch stage.
 
     Args:
