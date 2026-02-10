@@ -16,7 +16,7 @@ classifiers = [
 ]
 dependencies = [
     "aiida-core>=2.0",
-    "aiida-workgraph",
+    "aiida-workgraph==1.0.0b3",
     "aiida-vasp",
     "pymatgen",
     "ase",
