@@ -11,8 +11,7 @@ from aiida.plugins import WorkflowFactory
 from aiida_workgraph import task
 
 from .connections import BATCH_PORTS as PORTS  # noqa: F401
-from ..tasks import extract_energy
-from ..common.utils import deep_merge_dicts
+from ..common.utils import extract_total_energy, deep_merge_dicts
 
 
 def validate_stage(stage: dict, stage_names: set) -> None:
@@ -128,9 +127,9 @@ def create_stage_tasks(wg, stage, stage_name, context):
         # Add energy extraction task
         energy_task_name = f'energy_{stage_name}_{calc_label}'
         energy_task = wg.add_task(
-            extract_energy,
+            extract_total_energy,
             name=energy_task_name,
-            misc=vasp_task.outputs.misc,
+            energies=vasp_task.outputs.misc,
             retrieved=vasp_task.outputs.retrieved,
         )
 

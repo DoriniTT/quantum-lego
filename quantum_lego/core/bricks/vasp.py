@@ -9,7 +9,8 @@ from aiida.plugins import WorkflowFactory
 from aiida_workgraph import task
 
 from .connections import VASP_PORTS as PORTS  # noqa: F401
-from ..tasks import extract_energy, compute_dynamics
+from ..common.utils import extract_total_energy
+from ..tasks import compute_dynamics
 
 
 def validate_stage(stage: dict, stage_names: set) -> None:
@@ -245,9 +246,9 @@ def create_stage_tasks(wg, stage, stage_name, context):
 
     # Add energy extraction task
     energy_task = wg.add_task(
-        extract_energy,
+        extract_total_energy,
         name=f'energy_{stage_name}',
-        misc=vasp_task.outputs.misc,
+        energies=vasp_task.outputs.misc,
         retrieved=vasp_task.outputs.retrieved,
     )
 
