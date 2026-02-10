@@ -2,6 +2,13 @@
 
 Lightweight, incremental VASP calculation module for exploratory work.
 
+## 📚 Documentation
+
+- **[Quick Start Guide](QUICK_START.md)** - Get started in 5 minutes
+- **[Full Documentation](DOCUMENTATION.md)** - Comprehensive guide with examples
+- **[Visual Workflow Guide](VISUAL_GUIDE.md)** - Mermaid diagrams for common patterns
+- **[Developer Guide](AGENTS.md)** - Technical details for contributors
+
 ## Design Philosophy
 
 - **Incremental**: Run one calculation at a time, inspect, decide what's next
