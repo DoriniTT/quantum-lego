@@ -71,7 +71,7 @@ def create_stage_tasks(wg, stage, stage_name, context):
         Dict with task references for later stages.
     """
     from aiida import orm
-    from quantum_lego.core.common.convergence.workgraph import (
+    from quantum_lego.core.common.convergence import (
         convergence_scan, DEFAULT_CONV_SETTINGS,
     )
     from quantum_lego.core.common.convergence.tasks import (
