@@ -1,0 +1,89 @@
+name: Typist - Claude Code (OAuth)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  typist-claude:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      discussions: write
+      issues: read
+      pull-requests: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Validate Claude OAuth token secret
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "${CLAUDE_CODE_OAUTH_TOKEN}" ]; then
+            echo "Missing required secret: CLAUDE_CODE_OAUTH_TOKEN" >&2
+            exit 1
+          fi
+
+      - name: Build Typist prompt
+        id: prompt
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          prompt_file=".github/workflows/typist.md"
+          if [ ! -f "${prompt_file}" ]; then
+            echo "Prompt source file not found: ${prompt_file}" >&2
+            exit 1
+          fi
+
+          prompt_body="$(awk \
+            -v repo="${GITHUB_REPOSITORY}" \
+            -v workspace="${GITHUB_WORKSPACE}" \
+            -v run_id="${GITHUB_RUN_ID}" \
+            '
+            /^---[[:space:]]*$/ {
+              if (++delimiters == 2) {
+                in_body = 1
+                next
+              }
+            }
+            in_body {
+              gsub(/\$\{\{ github\.repository \}\}/, repo)
+              gsub(/\$\{\{ github\.workspace \}\}/, workspace)
+              gsub(/\$\{\{ github\.run_id \}\}/, run_id)
+              print
+            }
+            ' "${prompt_file}"
+          )"
+
+          if [ -z "${prompt_body}" ]; then
+            echo "Prompt body extraction failed for ${prompt_file}" >&2
+            exit 1
+          fi
+
+          {
+            echo "prompt<<__PROMPT_EOF__"
+            cat <<'__WRAPPER__'
+You are running in anthropics/claude-code-action (not GH-AW).
+If Serena or cache-memory tools are unavailable, continue using available tools.
+Do not modify repository files. Perform analysis only.
+
+At the end, create exactly one GitHub Discussion in category "general" with title prefix "[typist] ".
+Close or replace any previous typist discussion if possible.
+__WRAPPER__
+            echo
+            printf '%s\n' "${prompt_body}"
+            echo "__PROMPT_EOF__"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Run Typist with Claude Code OAuth
+        id: typist-claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: ${{ steps.prompt.outputs.prompt }}
