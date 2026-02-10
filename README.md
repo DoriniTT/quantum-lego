@@ -158,7 +158,7 @@ result = quick_vasp_sequential(
 )
 ```
 
-See `examples/vasp/run_mixed_dos_sources.py` for a runnable version.
+See `examples/04_sequential/mixed_dos_sources.py` for a runnable version.
 
 ### Result Functions
 

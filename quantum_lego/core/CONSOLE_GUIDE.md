@@ -255,7 +255,7 @@ console.print(table)
 Run the demonstration script to see all features in action:
 
 ```bash
-python examples/demo_rich_console.py
+python examples/10_utilities/demo_rich_console.py
 ```
 
 This script shows:
