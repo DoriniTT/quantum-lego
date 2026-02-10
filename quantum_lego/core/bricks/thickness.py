@@ -143,13 +143,13 @@ def create_stage_tasks(wg, stage, stage_name, context):
     from aiida.plugins import WorkflowFactory
     from aiida_workgraph import task as wg_task
 
-    from quantum_lego.core.common.convergence.workgraph import (
+    from quantum_lego.core.common.convergence import (
         extract_total_energy,
         relax_thickness_series,
         compute_surface_energies,
         gather_surface_energies,
-        _get_thickness_settings,
     )
+    from quantum_lego.core.common.convergence.utils import _get_thickness_settings
     from quantum_lego.core.common.convergence.slabs import generate_thickness_series
 
     # Resolve bulk structure and energy

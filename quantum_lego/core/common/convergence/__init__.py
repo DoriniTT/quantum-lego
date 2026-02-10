@@ -35,12 +35,14 @@ Usage:
     export_thickness_convergence_data(wg, output_dir='./results')  # Export data
 """
 
-from .workgraph import (
-    # ENCUT/k-points convergence
+# Import from new modular structure
+from .config import DEFAULT_CONV_SETTINGS
+from .encut_kpoints import (
     build_convergence_workgraph,
     get_convergence_results,
     convergence_scan,
-    # Thickness convergence
+)
+from .thickness import (
     build_thickness_convergence_workgraph,
     get_thickness_convergence_results,
     calculate_surface_energy,
@@ -66,6 +68,8 @@ from .visualization import (
 )
 
 __all__ = [
+    # Configuration
+    'DEFAULT_CONV_SETTINGS',
     # ENCUT/k-points convergence
     'build_convergence_workgraph',
     'get_convergence_results',
