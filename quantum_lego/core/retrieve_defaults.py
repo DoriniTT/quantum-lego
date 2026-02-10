@@ -1,8 +1,9 @@
 """Default file retrieval settings for lego VASP workflows."""
 
 import typing as t
+from typing import Final
 
-DEFAULT_VASP_RETRIEVE = [
+DEFAULT_VASP_RETRIEVE: Final[t.Tuple[str, ...]] = (
     'INCAR',
     'KPOINTS',
     'POTCAR',
@@ -11,7 +12,7 @@ DEFAULT_VASP_RETRIEVE = [
     'OUTCAR',
     'vasprun.xml',
     'OSZICAR',
-]
+)
 
 
 def merge_retrieve_lists(*lists: t.Optional[t.Iterable[str]]) -> t.List[str]:
