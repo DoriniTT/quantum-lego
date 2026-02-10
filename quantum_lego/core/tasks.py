@@ -48,14 +48,12 @@ def generate_neb_intermediate_image(
         )
 
     # Build endpoint with MIC-aware per-atom displacements.
-    displacements = []
     combined = ainit.copy()
     combined.extend(afinal_ref)
-    for atom_idx in range(len(ainit)):
-        vec = combined.get_distance(
-            atom_idx, atom_idx + len(ainit), vector=True, mic=True
-        )
-        displacements.append(vec.tolist())
+    displacements = [
+        combined.get_distance(atom_idx, atom_idx + len(ainit), vector=True, mic=True).tolist()
+        for atom_idx in range(len(ainit))
+    ]
 
     displacements = np.asarray(displacements, dtype=float)
     ainit.wrap(eps=1e-1)
@@ -133,13 +131,10 @@ def compute_dynamics(
 
     # Create positions_dof array: True = relax, False = fix
     num_atoms = len(structure.sites)
-    positions_dof = []
-
-    for i in range(1, num_atoms + 1):  # 1-based indexing
-        if i in fixed_atoms_list:
-            positions_dof.append([False, False, False])  # Fix atom
-        else:
-            positions_dof.append([True, True, True])  # Relax atom
+    positions_dof = [
+        [False, False, False] if i in fixed_atoms_list else [True, True, True]
+        for i in range(1, num_atoms + 1)  # 1-based indexing
+    ]
 
     return orm.Dict(dict={'positions_dof': positions_dof})
 
