@@ -1042,7 +1042,7 @@ Each brick has specific requirements - see `AGENTS.md` for technical details.
 
 - **Examples**: See `examples/` directory for working code
 - **Technical Details**: See `AGENTS.md` for development guide
-- **API Reference**: See `README.md` for function signatures
+- **API Reference**: See `../README.md` for function signatures
 - **GitHub Issues**: Report bugs at https://github.com/DoriniTT/quantum-lego/issues
 
 ---
