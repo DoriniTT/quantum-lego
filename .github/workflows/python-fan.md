@@ -14,7 +14,7 @@ network:
   - github
   - pypi
 imports:
-- github/gh-aw/.github/workflows/shared/reporting.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
+- shared/reporting.md
 safe-outputs:
   create-discussion:
     category: general
@@ -22,7 +22,7 @@ safe-outputs:
     max: 1
     title-prefix: "[python-fan] "
 description: "Daily Python package usage reviewer - analyzes direct dependencies prioritizing recently updated ones"
-engine: claude
+engine: copilot
 name: Python Fan
 source: github/gh-aw/.github/workflows/python-fan.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
 strict: true

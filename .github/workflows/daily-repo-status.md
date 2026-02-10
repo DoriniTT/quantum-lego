@@ -1,37 +1,40 @@
 ---
+name: Daily Repo Status
 description: |
-  This workflow creates daily repo status reports. It gathers recent repository
-  activity (issues, PRs, discussions, releases, code changes) and generates
-  engaging GitHub issues with productivity insights, community highlights,
-  and project recommendations.
-
-engine: claude
-
+  Creates daily repo status reports with productivity insights,
+  community highlights, and project recommendations.
+engine: copilot
+strict: true
+timeout-minutes: 15
 on:
-  #schedule: daily
+  #schedule:
+  #- cron: 0 8 * * 1-5
   workflow_dispatch:
-
 permissions:
   contents: read
   issues: read
   pull-requests: read
-
-network: defaults
-
+network:
+  allowed:
+  - defaults
+  - github
+imports:
+- shared/reporting.md
 steps:
   - name: Disable sparse checkout
     run: |
       git sparse-checkout disable
       git checkout
-
 tools:
   github:
-
+    toolsets:
+    - default
 safe-outputs:
   create-issue:
     title-prefix: "[repo-status] "
     labels: [report, daily-status]
-source: githubnext/agentics/workflows/daily-repo-status.md@e43596e069e74a65cd7d93315091672d278c2642
+    max: 1
+tracker-id: daily-repo-status
 ---
 
 # Daily Repo Status

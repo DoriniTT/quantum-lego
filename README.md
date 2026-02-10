@@ -2,15 +2,7 @@
 
 Lightweight, incremental VASP calculation module for exploratory work.
 
-## 📚 Documentation
-
-**New to Quantum Lego? Start here:** [Documentation Index](DOC_INDEX.md)
-
-- **[Quick Start Guide](QUICK_START.md)** - Get started in 5 minutes
-- **[Full Documentation](DOCUMENTATION.md)** - Comprehensive guide with examples
-- **[Visual Workflow Guide](VISUAL_GUIDE.md)** - Mermaid diagrams for common patterns
-- **[Developer Guide](AGENTS.md)** - Technical details for contributors
-- **[Documentation Index](DOC_INDEX.md)** - Navigate all documentation
+📚 **[Brick Connection Guide](BRICK_CONNECTIONS.md)** - Visual guide showing how all 13 brick types connect together like Lego pieces
 
 ## Design Philosophy
 

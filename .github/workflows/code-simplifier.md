@@ -1,14 +1,20 @@
 ---
 on:
-  #schedule: daily
+  #schedule:
+  #- cron: 0 12 * * 1-5
   skip-if-match: is:pr is:open in:title "[code-simplifier]"
-engine: claude
+  workflow_dispatch:
+engine: copilot
 permissions:
   contents: read
   issues: read
   pull-requests: read
+network:
+  allowed:
+  - defaults
+  - github
 imports:
-- github/gh-aw/.github/workflows/shared/reporting.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
+- shared/reporting.md
 steps:
   - name: Disable sparse checkout
     run: |
@@ -24,15 +30,26 @@ safe-outputs:
     reviewers:
     - copilot
     title-prefix: "[code-simplifier] "
-description: Analyzes recently modified code and creates pull requests with simplifications that improve clarity, consistency, and maintainability while preserving functionality
+description: Analyzes recently modified Python code and creates pull requests with simplifications that improve clarity, consistency, and maintainability while preserving functionality
 name: Code Simplifier
 source: github/gh-aw/.github/workflows/code-simplifier.md@94662b1dee8ce96c876ba9f33b3ab8be32de82a4
 strict: true
 timeout-minutes: 30
 tools:
+  bash:
+  - git log --since='24 hours ago' --pretty=format:'%H %s' --no-merges
+  - "find . -name '*.py' ! -name 'test_*.py' ! -path '*/tests/*' ! -path '*/__pycache__/*' -type f"
+  - cat **/*.py
+  - wc -l **/*.py
+  - grep -r 'def ' --include='*.py'
+  - "pytest tests/ -m tier1 -v 2>&1 || true"
+  - "flake8 quantum_lego/ --max-line-length=120 --ignore=E501,W503,E402,F401 2>&1 || true"
+  edit:
   github:
     toolsets:
     - default
+  serena:
+  - python
 tracker-id: code-simplifier
 ---
 <!-- This prompt will be imported in the agentic workflow .github/workflows/code-simplifier.md at runtime. -->
@@ -76,7 +93,7 @@ Use GitHub tools to:
 For each merged PR or recent commit:
 - Use `pull_request_read` with `method: get_files` to list changed files
 - Use `get_commit` to see file changes in recent commits
-- Focus on source code files (`.go`, `.js`, `.ts`, `.tsx`, `.cjs`, `.py`, etc.)
+- Focus on Python source files (`.py`)
 - Exclude test files, lock files, and generated files
 
 ### 1.3 Determine Scope
@@ -94,34 +111,18 @@ If **files were changed**, proceed to Phase 2.
 
 ### 2.1 Review Project Standards
 
-Before simplifying, review the project's coding standards from relevant documentation:
+Before simplifying, review the project's coding standards from `AGENTS.md`:
 
-- For Go projects: Check `AGENTS.md`, `DEVGUIDE.md`, or similar files
-- For JavaScript/TypeScript: Look for `CLAUDE.md`, style guides, or coding conventions
-- For Python: Check for style guides, PEP 8 adherence, or project-specific conventions
+**Key Standards to Apply (Python-only project):**
 
-**Key Standards to Apply:**
-
-For **JavaScript/TypeScript** projects:
-- Use ES modules with proper import sorting and extensions
-- Prefer `function` keyword over arrow functions for top-level functions
-- Use explicit return type annotations for top-level functions
-- Follow proper React component patterns with explicit Props types
-- Use proper error handling patterns (avoid try/catch when possible)
-- Maintain consistent naming conventions
-
-For **Go** projects:
-- Use `any` instead of `interface{}`
-- Follow console formatting for CLI output
-- Use semantic type aliases for domain concepts
-- Prefer small, focused files (200-500 lines ideal)
-- Use table-driven tests with descriptive names
-
-For **Python** projects:
-- Follow PEP 8 style guide
+- Follow PEP 8 style guide with 120-character line length
 - Use type hints for function signatures
 - Prefer explicit over implicit code
 - Use list/dict comprehensions where they improve clarity (not complexity)
+- Import order: stdlib → aiida → aiida_workgraph → third-party → quantum_lego
+- Use `from quantum_lego.core.common.utils import get_logger` for logging
+- Google-style docstrings with Args, Returns, Example sections
+- Use Rich library for terminal output via `quantum_lego/core/console.py`
 
 ### 2.2 Simplification Principles
 
@@ -199,14 +200,8 @@ Use the **edit** tool to modify files:
 After making simplifications, run the project's test suite to ensure no functionality was broken:
 
 ```bash
-# For Go projects
-make test-unit
-
-# For JavaScript/TypeScript projects
-npm test
-
-# For Python projects
-pytest
+# Run tier1 tests (fast, pure Python)
+pytest tests/ -m tier1 -v
 ```
 
 If tests fail:
@@ -220,14 +215,8 @@ If tests fail:
 Ensure code style is consistent:
 
 ```bash
-# For Go projects
-make lint
-
-# For JavaScript/TypeScript projects
-npm run lint
-
-# For Python projects
-flake8 . || pylint .
+# Lint the package
+flake8 quantum_lego/ --max-line-length=120 --ignore=E501,W503,E402,F401
 ```
 
 Fix any linting issues introduced by the simplifications.
@@ -237,15 +226,8 @@ Fix any linting issues introduced by the simplifications.
 Verify the project still builds successfully:
 
 ```bash
-# For Go projects
-make build
-
-# For JavaScript/TypeScript projects
-npm run build
-
-# For Python projects
-# (typically no build step, but check imports)
-python -m py_compile changed_files.py
+# Verify imports work
+python -c 'import quantum_lego'
 ```
 
 ## Phase 4: Create Pull Request
@@ -277,13 +259,13 @@ This PR simplifies recently modified code to improve clarity, consistency, and m
 
 ### Files Simplified
 
-- `path/to/file1.go` - [Brief description of improvements]
-- `path/to/file2.js` - [Brief description of improvements]
+- `path/to/module.py` - [Brief description of improvements]
+- `quantum_lego/core/file.py` - [Brief description of improvements]
 
 ### Improvements Made
 
 1. **Reduced Complexity**
-   - Simplified nested conditionals in `file1.go`
+   - Simplified nested conditionals in `module.py`
    - Extracted helper function for repeated logic
 
 2. **Enhanced Clarity**
@@ -292,8 +274,8 @@ This PR simplifies recently modified code to improve clarity, consistency, and m
    - Applied consistent naming conventions
 
 3. **Applied Project Standards**
-   - Used `function` keyword instead of arrow functions
-   - Added explicit type annotations
+   - Added type annotations
+   - Used Rich console for terminal output
    - Followed established patterns
 
 ### Changes Based On
@@ -304,9 +286,9 @@ Recent changes from:
 
 ### Testing
 
-- ✅ All tests pass (`make test-unit`)
-- ✅ Linting passes (`make lint`)
-- ✅ Build succeeds (`make build`)
+- ✅ All tests pass (`pytest tests/ -m tier1 -v`)
+- ✅ Linting passes (`flake8 quantum_lego/ --max-line-length=120`)
+- ✅ Import check succeeds (`python -c 'import quantum_lego'`)
 - ✅ No functional changes - behavior is identical
 
 ### Review Focus
