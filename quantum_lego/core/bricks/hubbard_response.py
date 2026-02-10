@@ -486,17 +486,20 @@ def print_stage_results(
         stage_name: Name of the stage.
         stage_result: Result dict from get_stage_results.
     """
-    print(f"  [{index}] {stage_name} (HUBBARD RESPONSE)")
+    from ..console import console, print_stage_header
+
+    print_stage_header(index, stage_name, brick_type="hubbard_response")
 
     if stage_result['responses'] is not None:
         responses = stage_result['responses']
-        print(f"      Responses gathered: {len(responses)}")
+        console.print(f"      [bold]Responses gathered:[/bold] {len(responses)}")
         potentials = [r.get('potential', 0.0) for r in responses]
         if potentials:
-            print(f"      Potentials: {potentials}")
+            potentials_str = ', '.join(f"[energy]{p:.3f}[/energy]" for p in potentials)
+            console.print(f"      [bold]Potentials:[/bold] {potentials_str} eV")
 
     if stage_result['ground_state_occupation'] is not None:
         gs = stage_result['ground_state_occupation']
         species = gs.get('target_species', '?')
         avg_d = gs.get('total_d_occupation', 0.0) / max(gs.get('atom_count', 1), 1)
-        print(f"      GS avg d-occupation per {species}: {avg_d:.3f}")
+        console.print(f"      [bold]GS avg d-occupation per {species}:[/bold] [energy]{avg_d:.3f}[/energy]")

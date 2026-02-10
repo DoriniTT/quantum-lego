@@ -626,28 +626,29 @@ def _extract_stage_from_workgraph(wg_node, stage_name: str, result: dict) -> Non
 
 def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None:
     """Print formatted results for a NEB stage."""
-    print(f"  [{index}] {stage_name} (NEB)")
+    from ..console import console, print_stage_header
+
+    print_stage_header(index, stage_name, brick_type="neb")
 
     if stage_result['structure'] is not None:
         struct = stage_result['structure']
-        print(
-            f"      Structure: {struct.get_formula()} "
-            f"({len(struct.sites)} atoms, PK: {struct.pk})"
-        )
+        formula = struct.get_formula()
+        n_atoms = len(struct.sites)
+        console.print(f"      [bold]Structure:[/bold] {formula} [dim]({n_atoms} atoms, PK: {struct.pk})[/dim]")
 
     if stage_result['misc'] is not None:
         run_status = stage_result['misc'].get('run_status', 'N/A')
-        print(f"      Status: {run_status}")
+        console.print(f"      [bold]Status:[/bold] {run_status}")
 
     if stage_result['remote'] is not None:
-        print(f"      Remote folder: PK {stage_result['remote'].pk}")
+        console.print(f"      [bold]Remote folder:[/bold] PK [pk]{stage_result['remote'].pk}[/pk]")
     if stage_result['files'] is not None:
         files = stage_result['files'].list_object_names()
-        print(f"      Retrieved: {', '.join(files)}")
+        console.print(f"      [bold]Retrieved:[/bold] [dim]{', '.join(files)}[/dim]")
 
     optional_available = [
         key for key in _OPTIONAL_OUTPUTS.values()
         if stage_result.get(key) is not None
     ]
     if optional_available:
-        print(f"      Optional outputs: {', '.join(optional_available)}")
+        console.print(f"      [bold]Optional outputs:[/bold] [dim]{', '.join(optional_available)}[/dim]")

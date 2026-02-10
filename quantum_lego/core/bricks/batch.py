@@ -386,28 +386,28 @@ def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None
         stage_name: Name of the stage.
         stage_result: Result dict from get_stage_results.
     """
-    print(f"  [{index}] {stage_name} (BATCH)")
+    from ..console import console, print_stage_header
+
+    print_stage_header(index, stage_name, brick_type="batch")
 
     calculations = stage_result.get('calculations', {})
     if calculations:
         for calc_label, calc_result in calculations.items():
-            energy_str = (
-                f"{calc_result['energy']:.6f} eV"
-                if calc_result['energy'] is not None
-                else "N/A"
-            )
-            print(f"      [{calc_label}] Energy: {energy_str}")
+            if calc_result['energy'] is not None:
+                console.print(f"      [{calc_label}] [bold]Energy:[/bold] [energy]{calc_result['energy']:.6f}[/energy] eV")
+            else:
+                console.print(f"      [{calc_label}] [bold]Energy:[/bold] N/A")
 
             if calc_result.get('misc') is not None:
                 misc = calc_result['misc']
                 run_status = misc.get('run_status', 'N/A')
-                print(f"        Status: {run_status}")
+                console.print(f"        [bold]Status:[/bold] {run_status}")
 
             if calc_result.get('remote') is not None:
-                print(f"        Remote folder: PK {calc_result['remote'].pk}")
+                console.print(f"        [bold]Remote folder:[/bold] PK [pk]{calc_result['remote'].pk}[/pk]")
 
             if calc_result.get('files') is not None:
                 files = calc_result['files'].list_object_names()
-                print(f"        Retrieved: {', '.join(files)}")
+                console.print(f"        [bold]Retrieved:[/bold] [dim]{', '.join(files)}[/dim]")
     else:
-        print("      (No calculation results found)")
+        console.print("      [dim](No calculation results found)[/dim]")

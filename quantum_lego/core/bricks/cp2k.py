@@ -538,32 +538,35 @@ def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None
         stage_name: Original stage name from config
         stage_result: Dict returned by get_stage_results
     """
-    print(f"  [{index}] {stage_name} (CP2K)")
+    from ..console import console, print_stage_header
+
+    print_stage_header(index, stage_name, brick_type="cp2k")
 
     if stage_result.get('energy') is not None:
-        print(f"      Energy: {stage_result['energy']:.6f} eV")
+        console.print(f"      [bold]Energy:[/bold] [energy]{stage_result['energy']:.6f}[/energy] eV")
 
     if stage_result.get('structure') is not None:
         struct = stage_result['structure']
         formula = struct.get_formula()
         n_atoms = len(struct.sites)
-        print(f"      Structure: {formula} ({n_atoms} atoms, PK: {struct.pk})")
+        console.print(f"      [bold]Structure:[/bold] {formula} [dim]({n_atoms} atoms, PK: {struct.pk})[/dim]")
 
     if stage_result.get('output_parameters') is not None:
         params = stage_result['output_parameters']
         # Display run_type if available
         run_type = params.get('run_type', 'N/A')
-        print(f"      Run type: {run_type}")
+        console.print(f"      [bold]Run type:[/bold] {run_type}")
         # Display motion_step_info if available (for GEO_OPT, MD)
         if 'motion_step_info' in params:
             step_info = params['motion_step_info']
             if isinstance(step_info, dict):
                 nsteps = step_info.get('nsteps', 'N/A')
-                print(f"      Steps: {nsteps}")
+                console.print(f"      [bold]Steps:[/bold] {nsteps}")
 
     if stage_result.get('remote') is not None:
-        print(f"      Remote folder: PK {stage_result['remote'].pk}")
+        console.print(f"      [bold]Remote folder:[/bold] PK [pk]{stage_result['remote'].pk}[/pk]")
 
     if stage_result.get('retrieved') is not None:
         files = stage_result['retrieved'].list_object_names()
-        print(f"      Retrieved: {', '.join(files[:5])}{'...' if len(files) > 5 else ''}")
+        files_str = ', '.join(files[:5]) + ('...' if len(files) > 5 else '')
+        console.print(f"      [bold]Retrieved:[/bold] [dim]{files_str}[/dim]")

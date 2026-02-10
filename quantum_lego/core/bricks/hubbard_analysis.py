@@ -277,25 +277,28 @@ def print_stage_results(
         stage_name: Name of the stage.
         stage_result: Result dict from get_stage_results.
     """
-    print(f"  [{index}] {stage_name} (HUBBARD ANALYSIS)")
+    from ..console import console, print_stage_header
+
+    print_stage_header(index, stage_name, brick_type="hubbard_analysis")
 
     if stage_result['hubbard_u_eV'] is not None:
-        print(f"      U = {stage_result['hubbard_u_eV']:.3f} eV")
+        console.print(f"      [bold]U =[/bold] [energy]{stage_result['hubbard_u_eV']:.3f}[/energy] eV")
 
     if stage_result['target_species'] is not None:
-        print(f"      Target: {stage_result['target_species']}")
+        console.print(f"      [bold]Target:[/bold] [cyan]{stage_result['target_species']}[/cyan]")
 
     if stage_result['chi_r2'] is not None:
-        print(f"      SCF fit R\u00b2: {stage_result['chi_r2']:.6f}")
+        console.print(f"      [bold]SCF fit R²:[/bold] {stage_result['chi_r2']:.6f}")
 
     if stage_result['chi_0_r2'] is not None:
-        print(f"      NSCF fit R\u00b2: {stage_result['chi_0_r2']:.6f}")
+        console.print(f"      [bold]NSCF fit R²:[/bold] {stage_result['chi_0_r2']:.6f}")
 
     if stage_result['response_data'] is not None:
         rd = stage_result['response_data']
         potentials = rd.get('potential_values_eV', [])
         if potentials:
-            print(f"      Potentials: {potentials}")
+            potentials_str = ', '.join(f"[energy]{p:.3f}[/energy]" for p in potentials)
+            console.print(f"      [bold]Potentials:[/bold] {potentials_str} eV")
 
     if stage_result['summary'] is not None:
         summary = stage_result['summary']
@@ -303,4 +306,4 @@ def print_stage_results(
         avg_d = gs.get('average_d_per_atom')
         if avg_d is not None:
             species = stage_result['target_species'] or '?'
-            print(f"      Avg d-occupation per {species}: {avg_d:.3f}")
+            console.print(f"      [bold]Avg d-occupation per {species}:[/bold] [energy]{avg_d:.3f}[/energy]")

@@ -305,27 +305,30 @@ def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None
         stage_name: Original stage name from config
         stage_result: Dict returned by get_stage_results
     """
-    print(f"\n{'=' * 70}")
-    print(f"Stage {index}: {stage_name} (QE)")
-    print(f"{'=' * 70}")
+    from ..console import console, print_stage_header, print_separator
+
+    print_separator()
+    print_stage_header(index, stage_name, brick_type="qe")
+    print_separator()
 
     # Energy
     if 'energy' in stage_result:
-        print(f"Energy: {stage_result['energy']:.6f} eV")
+        console.print(f"  [bold]Energy:[/bold] [energy]{stage_result['energy']:.6f}[/energy] eV")
 
     # Structure formula
     if 'structure' in stage_result:
         structure = stage_result['structure']
         if hasattr(structure, 'get_formula'):
             formula = structure.get_formula()
-            print(f"Structure: {formula}")
+            console.print(f"  [bold]Structure:[/bold] {formula}")
 
     # Output parameters highlights
     if 'output_parameters' in stage_result:
         params = stage_result['output_parameters']
         if 'fermi_energy' in params:
-            print(f"Fermi Energy: {params['fermi_energy']:.4f} eV")
+            console.print(f"  [bold]Fermi Energy:[/bold] [energy]{params['fermi_energy']:.4f}[/energy] eV")
         if 'total_force' in params:
-            print(f"Total Force: {params['total_force']:.4f} eV/Å")
+            console.print(f"  [bold]Total Force:[/bold] {params['total_force']:.4f} eV/Å")
 
-    print(f"{'=' * 70}\n")
+    print_separator()
+    console.print()

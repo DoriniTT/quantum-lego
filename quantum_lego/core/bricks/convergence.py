@@ -306,7 +306,9 @@ def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None
         stage_name: Name of the stage.
         stage_result: Result dict from get_stage_results.
     """
-    print(f"  [{index}] {stage_name} (CONVERGENCE)")
+    from ..console import console, print_stage_header
+
+    print_stage_header(index, stage_name, brick_type="convergence")
 
     recommendations = stage_result.get('recommendations')
     if recommendations:
@@ -319,19 +321,19 @@ def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None
         kpoints_conv = recommendations.get('kpoints_converged', False)
 
         if rec_cutoff is not None:
-            print(f"      Recommended ENCUT: {rec_cutoff} eV "
-                  f"(converged at {conv_cutoff} eV)")
+            console.print(f"      [bold]Recommended ENCUT:[/bold] [energy]{rec_cutoff}[/energy] eV "
+                          f"[dim](converged at {conv_cutoff} eV)[/dim]")
         else:
-            print("      Recommended ENCUT: NOT CONVERGED")
+            console.print("      [bold]Recommended ENCUT:[/bold] [warning]NOT CONVERGED[/warning]")
 
         if rec_ksp is not None:
-            print(f"      Recommended k-spacing: {rec_ksp} A^-1 "
-                  f"(converged at {conv_ksp} A^-1)")
+            console.print(f"      [bold]Recommended k-spacing:[/bold] {rec_ksp} A^-1 "
+                          f"[dim](converged at {conv_ksp} A^-1)[/dim]")
         else:
-            print("      Recommended k-spacing: NOT CONVERGED")
+            console.print("      [bold]Recommended k-spacing:[/bold] [warning]NOT CONVERGED[/warning]")
 
-        print(f"      Threshold: {threshold * 1000:.1f} meV/atom")
-        print(f"      ENCUT converged: {cutoff_conv}")
-        print(f"      K-points converged: {kpoints_conv}")
+        console.print(f"      [bold]Threshold:[/bold] {threshold * 1000:.1f} meV/atom")
+        console.print(f"      [bold]ENCUT converged:[/bold] {cutoff_conv}")
+        console.print(f"      [bold]K-points converged:[/bold] {kpoints_conv}")
     else:
-        print("      (No convergence results available)")
+        console.print("      [dim](No convergence results available)[/dim]")
