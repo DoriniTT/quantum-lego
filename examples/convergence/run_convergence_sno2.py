@@ -52,7 +52,7 @@ stages = [
 ]
 
 # ── Cluster config: obelix ─────────────────────────────────────────────
-from quantum_lego.core import quick_vasp_sequential
+from quantum_lego import quick_vasp_sequential
 
 result = quick_vasp_sequential(
     structure=structure,
@@ -82,5 +82,5 @@ print(f"  verdi process show {result['__workgraph_pk__']}")
 print(f"  verdi process report {result['__workgraph_pk__']}")
 print()
 print("Get results when done:")
-print("  from quantum_lego.core import print_sequential_results")
+print("  from quantum_lego import print_sequential_results")
 print(f"  print_sequential_results({result})")

@@ -8,7 +8,7 @@ Usage:
 
 import sys
 from aiida import orm, load_profile
-from quantum_lego.core import get_status
+from quantum_lego import get_status
 
 load_profile('presto')
 

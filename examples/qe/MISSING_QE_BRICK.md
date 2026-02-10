@@ -112,7 +112,7 @@ verdi process show <PK>
 ### Check Results
 
 ```python
-from quantum_lego.core import get_results
+from quantum_lego import get_results
 results = get_results(<PK>)
 print(results)
 ```

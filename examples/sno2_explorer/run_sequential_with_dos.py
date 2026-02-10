@@ -20,7 +20,7 @@ from pathlib import Path
 
 load_profile('presto')
 
-from quantum_lego.core import quick_vasp_sequential, print_sequential_results
+from quantum_lego import quick_vasp_sequential, print_sequential_results
 from quantum_lego.core.bricks.connections import get_brick_info
 
 # Show available ports for each brick type used
@@ -148,7 +148,7 @@ if __name__ == '__main__':
 
     print(f"\nMonitor: verdi process show {pk}")
     print("\nAfter completion, view results with:")
-    print("  from quantum_lego.core import print_sequential_results, get_stage_results")
+    print("  from quantum_lego import print_sequential_results, get_stage_results")
     print(f"  result = {{'__workgraph_pk__': {pk}, "
           f"'__stage_names__': {stage_names}, "
           f"'__stage_types__': {stage_types}, "

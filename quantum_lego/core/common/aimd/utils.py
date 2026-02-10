@@ -125,5 +125,4 @@ def organize_aimd_results(node) -> dict:
             ],
         }
     """
-    # TODO: Implementation in next task
-    pass
+    raise NotImplementedError("organize_aimd_results is not yet implemented")

@@ -16,8 +16,8 @@ remote_folder output optional. This allows the workflow to continue since
 the response calculations don't need their own remote_folder (both NSCF and
 SCF restart from the ground state's remote folder, not from each other).
 
-See: https://github.com/aiidateam/aiida-core/issues/XXXX
-See: https://github.com/aiidateam/aiida-vasp/issues/XXXX
+See: https://github.com/aiidateam/aiida-core/issues/ (missing remote_folder output)
+See: https://github.com/aiidateam/aiida-vasp/issues/ (VaspWorkChain exit code 11)
 """
 
 from aiida import orm

@@ -30,7 +30,7 @@ load_profile()
 
 def run_single_qe_calc():
     """Run a single QE calculation using quick_qe()."""
-    from quantum_lego.core import quick_qe, get_status
+    from quantum_lego import quick_qe, get_status
 
     structure = create_si_structure()
 
@@ -70,7 +70,7 @@ def run_single_qe_calc():
 
 def run_sequential_qe_pipeline():
     """Run a sequential QE pipeline: relax -> scf -> dos."""
-    from quantum_lego.core import quick_qe_sequential, get_status
+    from quantum_lego import quick_qe_sequential, get_status
 
     structure = create_si_structure()
 

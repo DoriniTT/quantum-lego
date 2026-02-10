@@ -23,7 +23,7 @@ Stage types are implemented as "bricks" (see bricks/ subdirectory):
 
 Example usage:
 
-    >>> from quantum_lego.core import quick_vasp, get_results, get_status
+    >>> from quantum_lego import quick_vasp, get_results, get_status
     >>>
     >>> # Single calculation
     >>> pk = quick_vasp(
@@ -56,7 +56,7 @@ Example usage:
 
 DOS calculation using BandsWorkChain:
 
-    >>> from quantum_lego.core import quick_dos, get_dos_results
+    >>> from quantum_lego import quick_dos, get_dos_results
     >>>
     >>> # DOS calculation (SCF + DOS handled internally)
     >>> # Note: AiiDA-VASP requires lowercase INCAR keys
@@ -79,7 +79,7 @@ DOS calculation using BandsWorkChain:
 
 Batch DOS calculation (multiple structures in parallel):
 
-    >>> from quantum_lego.core import quick_dos_batch, get_batch_dos_results
+    >>> from quantum_lego import quick_dos_batch, get_batch_dos_results
     >>>
     >>> # Compare DOS for different structures
     >>> result = quick_dos_batch(
@@ -103,7 +103,7 @@ Batch DOS calculation (multiple structures in parallel):
 
 Sequential multi-stage calculation with restart chaining:
 
-    >>> from quantum_lego.core import quick_vasp_sequential, print_sequential_results
+    >>> from quantum_lego import quick_vasp_sequential, print_sequential_results
     >>>
     >>> # Define stages with automatic restart chaining
     >>> stages = [

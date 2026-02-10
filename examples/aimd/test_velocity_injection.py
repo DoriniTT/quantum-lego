@@ -14,7 +14,7 @@ from aiida import orm, load_profile
 load_profile()
 
 from pymatgen.core import Structure, Lattice
-from quantum_lego.core import quick_aimd
+from quantum_lego import quick_aimd
 
 
 def parse_poscar_velocities(poscar_content: str):

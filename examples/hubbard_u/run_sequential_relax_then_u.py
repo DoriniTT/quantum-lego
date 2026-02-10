@@ -110,7 +110,7 @@ stages = [
 ]
 
 # ── Submit sequential workflow ──────────────────────────────────────────
-from quantum_lego.core import quick_vasp_sequential, print_sequential_results
+from quantum_lego import quick_vasp_sequential, print_sequential_results
 
 result = quick_vasp_sequential(
     structure=structure,
@@ -137,7 +137,7 @@ print(f"  verdi process show {pk}")
 print(f"  verdi process report {pk}")
 print()
 print("Get results when done:")
-print("  from quantum_lego.core import print_sequential_results, get_stage_results")
+print("  from quantum_lego import print_sequential_results, get_stage_results")
 print(f"  print_sequential_results({result})")
 print(f"  u_result = get_stage_results({result}, 'analysis')")
 print("  print(f\"U = {u_result['hubbard_u_eV']:.3f} eV\")")

@@ -11,7 +11,7 @@ from aiida import orm, load_profile
 load_profile()
 
 from pymatgen.core import Structure, Lattice
-from quantum_lego.core import quick_vasp_sequential, quick_aimd, print_sequential_results
+from quantum_lego import quick_vasp_sequential, quick_aimd, print_sequential_results
 
 # ── Create a simple SnO2 structure ──
 lattice = Lattice.tetragonal(4.737, 3.186)

@@ -46,7 +46,7 @@ def run_cp2k_geo_opt_then_energy():
     - Restart chaining between stages
     - Structure passing from optimization to single point
     """
-    from quantum_lego.core import quick_vasp_sequential, get_status
+    from quantum_lego import quick_vasp_sequential, get_status
 
     structure = create_si_structure()
 
@@ -181,7 +181,7 @@ def run_cp2k_md():
     - Temperature and timestep control in MOTION section
     - Trajectory output
     """
-    from quantum_lego.core import quick_vasp_sequential, get_status
+    from quantum_lego import quick_vasp_sequential, get_status
 
     structure = create_si_structure()
 

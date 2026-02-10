@@ -21,7 +21,7 @@ Usage:
     verdi process show <PK>
 
 Viewing results:
-    from quantum_lego.core import print_sequential_results, get_stage_results
+    from quantum_lego import print_sequential_results, get_stage_results
     print_sequential_results(<PK>)
 
     # Access U value directly
@@ -133,7 +133,7 @@ stages = [
 ]
 
 # ── Submit ──────────────────────────────────────────────────────────────
-from quantum_lego.core import quick_vasp_sequential
+from quantum_lego import quick_vasp_sequential
 
 result = quick_vasp_sequential(
     structure=structure,
@@ -167,7 +167,7 @@ print(f"  verdi process show {pk}")
 print(f"  verdi process report {pk}")
 print()
 print("View results when finished:")
-print("  from quantum_lego.core import print_sequential_results, get_stage_results")
+print("  from quantum_lego import print_sequential_results, get_stage_results")
 print(f"  print_sequential_results({pk})")
 print()
 print("  # Extract U value directly")

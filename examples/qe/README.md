@@ -113,7 +113,7 @@ verdi process show <PK>
 
 After the calculation completes:
 ```python
-from quantum_lego.core import get_results
+from quantum_lego import get_results
 results = get_results(<PK>)
 print(results)
 ```
@@ -162,7 +162,7 @@ structure.store()
 For multi-stage pipelines (SCF → relax → DOS), use `quick_qe_sequential()`:
 
 ```python
-from quantum_lego.core import quick_qe_sequential
+from quantum_lego import quick_qe_sequential
 
 stages = [
     {

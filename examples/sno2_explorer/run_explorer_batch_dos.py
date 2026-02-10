@@ -9,13 +9,13 @@ Usage:
     2. Edit the configuration below for your system
     3. Run: python run_explorer_batch_dos.py
     4. Monitor: verdi process show <PK>
-    5. Get results: python -c "from quantum_lego.core import print_batch_dos_results; print_batch_dos_results(<result>)"
+    5. Get results: python -c "from quantum_lego import print_batch_dos_results; print_batch_dos_results(<result>)"
 """
 
 from pathlib import Path
 from aiida import orm, load_profile
 from ase.io import read
-from quantum_lego.core import quick_dos_batch, get_batch_dos_results
+from quantum_lego import quick_dos_batch, get_batch_dos_results
 
 # ============================================================================
 # Configuration - Edit these for your system
@@ -110,7 +110,7 @@ if __name__ == '__main__':
     print(f"\nMonitor with: verdi process show {result['__workgraph_pk__']}")
     print(f"             verdi process report {result['__workgraph_pk__']}")
     print(f"\nTo get results when done:")
-    print(f"  from quantum_lego.core import get_batch_dos_results, print_batch_dos_results")
+    print(f"  from quantum_lego import get_batch_dos_results, print_batch_dos_results")
     print(f"  result = {result}")
     print(f"  print_batch_dos_results(result)")
     print(f"\n  # Or extract results programmatically:")

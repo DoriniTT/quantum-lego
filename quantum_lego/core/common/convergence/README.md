@@ -492,11 +492,11 @@ After completion, `verdi process show <PK>` displays:
 ```
 Outputs                  PK      Type
 -----------------------  ------  ------
-cutoff_conv_data         XXXXX   Dict
-kpoints_conv_data        XXXXX   Dict
-cutoff_analysis          XXXXX   Dict
-kpoints_analysis         XXXXX   Dict
-recommendations          XXXXX   Dict
+cutoff_conv_data         <PK>   Dict
+kpoints_conv_data        <PK>   Dict
+cutoff_analysis          <PK>   Dict
+kpoints_analysis         <PK>   Dict
+recommendations          <PK>   Dict
 ```
 
 ### `recommendations` Dict contents:

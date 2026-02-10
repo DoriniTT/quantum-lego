@@ -11,7 +11,7 @@ Usage:
 from pathlib import Path
 from aiida import orm, load_profile
 from ase.io import read
-from quantum_lego.core import quick_vasp_batch
+from quantum_lego import quick_vasp_batch
 
 # =============================================================================
 # Configuration

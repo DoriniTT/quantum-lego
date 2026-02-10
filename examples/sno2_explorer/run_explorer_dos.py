@@ -9,13 +9,13 @@ Usage:
     2. Edit the configuration below for your system
     3. Run: python run_dos.py
     4. Monitor: verdi process show <PK>
-    5. Get results: python -c "from quantum_lego.core import print_dos_results; print_dos_results(<PK>)"
+    5. Get results: python -c "from quantum_lego import print_dos_results; print_dos_results(<PK>)"
 """
 
 from pathlib import Path
 from aiida import orm, load_profile
 from ase.io import read
-from quantum_lego.core import quick_dos
+from quantum_lego import quick_dos
 
 # ============================================================================
 # Configuration - Edit these for your system
@@ -90,4 +90,4 @@ if __name__ == '__main__':
 
     print(f"\nSubmitted DOS calculation: PK {pk}")
     print(f"Monitor with: verdi process show {pk}")
-    print(f"Get results: python -c \"from quantum_lego.core import print_dos_results; print_dos_results({pk})\"")
+    print(f"Get results: python -c \"from quantum_lego import print_dos_results; print_dos_results({pk})\"")

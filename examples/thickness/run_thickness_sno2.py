@@ -105,7 +105,7 @@ if __name__ == '__main__':
     pmg_struct = Structure.from_file(str(STRUCTURE_FILE))
     structure = orm.StructureData(pymatgen=pmg_struct)
 
-    from quantum_lego.core import quick_vasp_sequential
+    from quantum_lego import quick_vasp_sequential
 
     result = quick_vasp_sequential(
         structure=structure,
@@ -127,5 +127,5 @@ if __name__ == '__main__':
     print(f"  verdi process report {pk}")
     print()
     print("Get results when done:")
-    print("  from quantum_lego.core import print_sequential_results")
+    print("  from quantum_lego import print_sequential_results")
     print(f"  print_sequential_results({result})")

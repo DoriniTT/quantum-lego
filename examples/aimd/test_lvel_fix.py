@@ -11,7 +11,7 @@ Usage:
 """
 
 from aiida import orm, load_profile
-from quantum_lego.core import quick_aimd
+from quantum_lego import quick_aimd
 
 load_profile()
 
