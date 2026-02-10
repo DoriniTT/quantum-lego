@@ -61,7 +61,7 @@ You are an expert code simplification specialist focused on enhancing code clari
 
 ## Your Mission
 
-Analyze recently modified code from the last 24 hours and apply refinements that improve code quality while preserving all functionality. Create a pull request with the simplified code if improvements are found.
+Analyze all Python source files in `quantum_lego/core/` and apply refinements that improve code quality while preserving all functionality. Create a pull request with the simplified code if improvements are found.
 
 ## Current Context
 
@@ -69,43 +69,28 @@ Analyze recently modified code from the last 24 hours and apply refinements that
 - **Analysis Date**: $(date +%Y-%m-%d)
 - **Workspace**: ${{ github.workspace }}
 
-## Phase 1: Identify Recently Modified Code
+## Phase 1: Identify Files to Analyze
 
-### 1.1 Find Recent Changes
+### 1.1 Enumerate All Core Files
 
-Search for merged pull requests and commits from the last 24 hours:
+Find all Python source files in `quantum_lego/core/`:
 
 ```bash
-# Get yesterday's date in ISO format
-YESTERDAY=$(date -d '1 day ago' '+%Y-%m-%d' 2>/dev/null || date -v-1d '+%Y-%m-%d')
-
-# List recent commits
-git log --since="24 hours ago" --pretty=format:"%H %s" --no-merges
+find quantum_lego/core/ -name '*.py' ! -name 'test_*.py' ! -path '*/tests/*' ! -path '*/__pycache__/*' -type f | sort
 ```
 
-Use GitHub tools to:
-- Search for pull requests merged in the last 24 hours: `repo:${{ github.repository }} is:pr is:merged merged:>=${YESTERDAY}`
-- Get details of merged PRs to understand what files were changed
-- List commits from the last 24 hours to identify modified files
+This is the complete set of files to analyze — do not filter by recency.
 
-### 1.2 Extract Changed Files
+### 1.2 Determine Scope
 
-For each merged PR or recent commit:
-- Use `pull_request_read` with `method: get_files` to list changed files
-- Use `get_commit` to see file changes in recent commits
-- Focus on Python source files (`.py`)
-- Exclude test files, lock files, and generated files
-
-### 1.3 Determine Scope
-
-If **no files were changed in the last 24 hours**, exit gracefully without creating a PR:
+If **no Python files exist** in `quantum_lego/core/`, exit gracefully:
 
 ```
-✅ No code changes detected in the last 24 hours.
-Code simplifier has nothing to process today.
+✅ No Python source files found in quantum_lego/core/.
+Code simplifier has nothing to process.
 ```
 
-If **files were changed**, proceed to Phase 2.
+If **files exist**, proceed to Phase 2 and analyze all of them.
 
 ## Phase 2: Analyze and Simplify Code
 
@@ -278,11 +263,9 @@ This PR simplifies recently modified code to improve clarity, consistency, and m
    - Used Rich console for terminal output
    - Followed established patterns
 
-### Changes Based On
+### Files Scope
 
-Recent changes from:
-- #[PR_NUMBER] - [PR title]
-- Commit [SHORT_SHA] - [Commit message]
+Full analysis of `quantum_lego/core/` — all Python source files examined.
 
 ### Testing
 
@@ -316,10 +299,10 @@ Create the pull request using the safe-outputs configuration:
 ## Important Guidelines
 
 ### Scope Control
-- **Focus on recent changes**: Only refine code modified in the last 24 hours
-- **Don't over-refactor**: Avoid touching unrelated code
+- **Focus on `quantum_lego/core/`**: Analyze all Python source files in that subtree
+- **Don't over-refactor**: Make targeted, surgical improvements only
 - **Preserve interfaces**: Don't change public APIs or exported functions
-- **Incremental improvements**: Make targeted, surgical changes
+- **Incremental improvements**: One logical improvement per edit
 
 ### Quality Standards
 - **Test first**: Always run tests after simplifications
@@ -348,15 +331,15 @@ A successful simplification:
 
 Your output MUST either:
 
-1. **If no changes in last 24 hours**:
+1. **If no Python files found in `quantum_lego/core/`**:
    ```
-   ✅ No code changes detected in the last 24 hours.
-   Code simplifier has nothing to process today.
+   ✅ No Python source files found in quantum_lego/core/.
+   Code simplifier has nothing to process.
    ```
 
 2. **If no simplifications beneficial**:
    ```
-   ✅ Code analyzed from last 24 hours.
+   ✅ All files in quantum_lego/core/ analyzed.
    No simplifications needed - code already meets quality standards.
    ```
 
