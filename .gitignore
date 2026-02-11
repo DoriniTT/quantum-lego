@@ -190,3 +190,5 @@ git-commit.sh
 
 # External dependencies (cloned repos)
 teros/external/FukuiGrid/
+.gemini/
+gha-creds-*.json
