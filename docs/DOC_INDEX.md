@@ -35,7 +35,7 @@ Welcome to the Quantum Lego documentation! This page helps you navigate the docu
 ### [DOCUMENTATION.md](DOCUMENTATION.md) - Complete Reference
 **Who:** All users wanting comprehensive information
 **What you'll learn:**
-- All 13 brick types in detail
+- All 16 brick types in detail
 - Port system and connection validation
 - Sequential workflow patterns
 - Batch operations
@@ -48,7 +48,7 @@ Welcome to the Quantum Lego documentation! This page helps you navigate the docu
 
 **Key sections:**
 - [Core Concepts](DOCUMENTATION.md#core-concepts) - Understanding the brick system
-- [Brick Types](DOCUMENTATION.md#brick-types) - All 13 brick types explained
+- [Brick Types](DOCUMENTATION.md#brick-types) - All 16 brick types explained
 - [Sequential Workflows](DOCUMENTATION.md#sequential-workflows) - Multi-stage calculations
 - [Batch Operations](DOCUMENTATION.md#batch-operations) - Parallel calculations
 - [Examples](DOCUMENTATION.md#examples) - Working code samples
@@ -191,6 +191,11 @@ For contributors or developers integrating Quantum Lego.
 ### "I want Bader charge analysis"
 → [DOCUMENTATION.md - Bader Brick](DOCUMENTATION.md#7-bader-brick-bader)
 
+### "I need Birch-Murnaghan equation of state fitting"
+→ [DOCUMENTATION.md - Birch-Murnaghan Brick](DOCUMENTATION.md#12-birch-murnaghan-brick-birch_murnaghan)
+→ [VISUAL_GUIDE.md - Birch-Murnaghan EOS](VISUAL_GUIDE.md#birch-murnaghan-eos)
+→ Example script: `examples/07_advanced_vasp/birch_murnaghan_sno2.py`
+
 ### "I'm getting errors"
 → [DOCUMENTATION.md - Troubleshooting](DOCUMENTATION.md#troubleshooting)
 → [QUICK_START.md - Common Pitfalls](QUICK_START.md#common-pitfalls)
@@ -222,6 +227,9 @@ Quick lookup table for all brick types:
 | `neb` | Reaction pathways | [Docs](DOCUMENTATION.md#9-neb-bricks-generate_neb_images-neb) | [Visual](VISUAL_GUIDE.md#complete-neb-workflow) |
 | `qe` | Quantum ESPRESSO | [Docs](DOCUMENTATION.md#10-qe-brick-qe) | - |
 | `cp2k` | CP2K calculations | [Docs](DOCUMENTATION.md#11-cp2k-brick-cp2k) | - |
+| `birch_murnaghan` | EOS fitting | [Docs](DOCUMENTATION.md#12-birch-murnaghan-brick-birch_murnaghan) | [Visual](VISUAL_GUIDE.md#birch-murnaghan-eos) |
+| `birch_murnaghan_refine` | Refined EOS scan | [Docs](DOCUMENTATION.md#13-birch-murnaghan-refine-brick-birch_murnaghan_refine) | [Visual](VISUAL_GUIDE.md#birch-murnaghan-eos) |
+| `fukui_analysis` | Fukui index analysis | [Docs](DOCUMENTATION.md#14-fukui-analysis-brick-fukui_analysis) | - |
 
 ---
 
@@ -286,7 +294,7 @@ quantum-lego/
 ├── DOC_INDEX.md           ← This file
 ├── quantum_lego/          ← Python package
 │   └── core/
-│       ├── bricks/        ← 13 brick types
+│       ├── bricks/        ← 16 brick types
 │       ├── common/        ← Utilities
 │       └── ...
 ├── examples/              ← Working examples
@@ -319,10 +327,10 @@ quantum-lego/
 | File | Lines | Purpose | Last Updated |
 |------|-------|---------|--------------|
 | QUICK_START.md | 482 | Tutorial | 2026-02-10 |
-| DOCUMENTATION.md | 1050 | Complete reference | 2026-02-10 |
-| VISUAL_GUIDE.md | 624 | Diagrams | 2026-02-10 |
-| AGENTS.md | 338 | Developer guide | 2026-02-10 |
-| README.md | 411 | API reference | 2026-02-10 |
+| DOCUMENTATION.md | 1150+ | Complete reference | 2026-02-13 |
+| VISUAL_GUIDE.md | 700+ | Diagrams | 2026-02-13 |
+| AGENTS.md | 365+ | Developer guide | 2026-02-13 |
+| README.md | 495+ | API reference | 2026-02-13 |
 
 ---
 
@@ -340,4 +348,4 @@ After reading the documentation:
 
 **Happy building with Quantum Lego! 🧱⚗️**
 
-*Last updated: 2026-02-10*
+*Last updated: 2026-02-13*

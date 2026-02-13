@@ -175,27 +175,21 @@ def build_recommended_structure(
     return orm.StructureData(pymatgen=pmg)
 
 
-@task.calcfunction
-def build_refined_structures(
-    structure: orm.StructureData,
+@task.calcfunction(outputs=['volumes', 'labels'])
+def compute_refined_eos_params(
     eos_result: orm.Dict,
     strain_range: orm.Float,
     n_points: orm.Int,
 ) -> dict:
-    """Generate N volume-scaled structures around V0 for refined EOS scan.
-
-    Creates structures uniformly distributed in the range
-    [V0*(1 - strain_range), V0*(1 + strain_range)].
+    """Compute target volumes and labels for a refined EOS scan around V0.
 
     Args:
-        structure: Base structure for scaling.
         eos_result: Dict from fit_birch_murnaghan_eos containing 'v0'.
         strain_range: Fractional range around V0 (e.g. 0.02 for +/-2%).
         n_points: Number of volume points to generate.
 
     Returns:
         Dict with:
-            - 'refine_00', 'refine_01', ...: StructureData nodes
             - 'volumes': orm.List of target volumes
             - 'labels': orm.List of labels
     """
@@ -203,17 +197,50 @@ def build_refined_structures(
     n = n_points.value
     sr = strain_range.value
 
-    results = {}
     volumes, labels = [], []
     for i, frac in enumerate(np.linspace(-1, 1, n)):
         target_vol = v0 * (1 + frac * sr)
-        label = f'refine_{i:02d}'
-        pmg = structure.get_pymatgen()
-        pmg.scale_lattice(target_vol)
-        results[label] = orm.StructureData(pymatgen=pmg)
         volumes.append(target_vol)
-        labels.append(label)
+        labels.append(f'refine_{i:02d}')
 
-    results['volumes'] = orm.List(list=volumes)
-    results['labels'] = orm.List(list=labels)
-    return results
+    return {
+        'volumes': orm.List(list=volumes),
+        'labels': orm.List(list=labels),
+    }
+
+
+@task.calcfunction
+def build_single_refined_structure(
+    structure: orm.StructureData,
+    eos_result: orm.Dict,
+    strain_range: orm.Float,
+    n_points: orm.Int,
+    point_index: orm.Int,
+) -> orm.StructureData:
+    """Scale a structure to the target volume for one refined EOS point.
+
+    Computes the target volume for the given point index in the range
+    [V0*(1 - strain_range), V0*(1 + strain_range)] and scales the
+    structure uniformly to that volume.
+
+    Args:
+        structure: Base structure for scaling.
+        eos_result: Dict from fit_birch_murnaghan_eos containing 'v0'.
+        strain_range: Fractional range around V0 (e.g. 0.02 for +/-2%).
+        n_points: Total number of volume points.
+        point_index: 0-based index of this point.
+
+    Returns:
+        StructureData scaled to the target volume.
+    """
+    v0 = eos_result['v0']
+    n = n_points.value
+    sr = strain_range.value
+    idx = point_index.value
+
+    frac = np.linspace(-1, 1, n)[idx]
+    target_vol = v0 * (1 + frac * sr)
+
+    pmg = structure.get_pymatgen()
+    pmg.scale_lattice(target_vol)
+    return orm.StructureData(pymatgen=pmg)

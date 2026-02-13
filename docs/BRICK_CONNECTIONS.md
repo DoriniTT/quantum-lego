@@ -4,7 +4,7 @@ This guide visualizes how Quantum Lego bricks connect together like puzzle piece
 
 ## Table of Contents
 
-1. [Overview: All 13 Brick Types](#overview-all-13-brick-types)
+1. [Overview: All 16 Brick Types](#overview-all-16-brick-types)
 2. [Port Type System](#port-type-system)
 3. [Basic Sequential Patterns](#basic-sequential-patterns)
 4. [Advanced Workflows](#advanced-workflows)
@@ -14,7 +14,7 @@ This guide visualizes how Quantum Lego bricks connect together like puzzle piece
 
 ---
 
-## Overview: All 13 Brick Types
+## Overview: All 16 Brick Types
 
 ```mermaid
 graph TB
@@ -31,6 +31,11 @@ graph TB
         BATCH[BATCH<br/>Parallel Calculations]
     end
 
+    subgraph "EOS Bricks"
+        BM[BIRCH_MURNAGHAN<br/>EOS Fitting]
+        BM_REF[BIRCH_MURNAGHAN_REFINE<br/>Refined EOS Scan]
+    end
+
     subgraph "Analysis Bricks"
         BADER[BADER<br/>Charge Analysis]
         CONV[CONVERGENCE<br/>ENCUT & K-points]
@@ -38,6 +43,7 @@ graph TB
         HUBB_R[HUBBARD_RESPONSE<br/>U Response Calcs]
         HUBB_A[HUBBARD_ANALYSIS<br/>U Regression]
         GEN_NEB[GENERATE_NEB_IMAGES<br/>NEB Image Generator]
+        FUKUI[FUKUI_ANALYSIS<br/>Fukui Index]
     end
 
     style VASP fill:#4CAF50,stroke:#2E7D32,color:#fff
@@ -53,12 +59,16 @@ graph TB
     style HUBB_R fill:#FF9800,stroke:#E65100,color:#fff
     style HUBB_A fill:#FF9800,stroke:#E65100,color:#fff
     style GEN_NEB fill:#FF9800,stroke:#E65100,color:#fff
+    style FUKUI fill:#FF9800,stroke:#E65100,color:#fff
+    style BM fill:#E91E63,stroke:#AD1457,color:#fff
+    style BM_REF fill:#E91E63,stroke:#AD1457,color:#fff
 ```
 
 **Legend:**
 - 🟢 **Green**: Computation bricks that produce structure outputs
 - 🔵 **Blue**: Computation bricks without structure outputs
 - 🟠 **Orange**: Analysis bricks
+- 🔴 **Pink**: EOS bricks (fitting and refinement)
 
 ---
 
@@ -93,6 +103,10 @@ graph LR
         HRES[hubbard_result]
     end
 
+    subgraph "EOS Types"
+        EOS_R[eos_result]
+    end
+
     subgraph "Utility Types"
         FILE[file]
         NEB_I[neb_images]
@@ -113,6 +127,7 @@ graph LR
     style HRES fill:#9C27B0,color:#fff
     style FILE fill:#607D8B,color:#fff
     style NEB_I fill:#795548,color:#fff
+    style EOS_R fill:#E91E63,color:#fff
 ```
 
 ---
@@ -531,6 +546,8 @@ graph LR
 | `restart` | Reuse remote folder (WAVECAR/CHGCAR) | `'restart': 'previous_stage'` |
 | `initial_from` / `final_from` | NEB endpoints | `'initial_from': 'relax_i'` |
 | `images_from` | NEB images from generator | `'images_from': 'gen_images'` |
+| `batch_from` | BM: reference batch stage for energies | `'batch_from': 'volume_scan'` |
+| `eos_from` | BM refine: reference BM fit for V0 | `'eos_from': 'eos_fit'` |
 
 ---
 
@@ -565,6 +582,8 @@ Some inputs can only connect to specific brick types:
 | `neb.initial_structure` | `vasp` |
 | `neb.images` | `generate_neb_images` |
 | `thickness.energy` | `vasp` |
+| `birch_murnaghan.batch_energies` | `batch` |
+| `birch_murnaghan_refine.eos_result` | `birch_murnaghan` |
 
 ---
 
@@ -654,6 +673,9 @@ warnings = validate_connections(stages)
 | **cp2k** | Yes | Yes* | Yes | Yes* | No | Via `restart` |
 | **generate_neb_images** | 2x from VASP | No | No | No | Yes (endpoints) | No |
 | **neb** | 2x from VASP | Yes | No | Yes | Yes (endpoints) | Via `restart` |
+| **birch_murnaghan** | From batch | Yes (V0) | No | No | Yes (batch) | No |
+| **birch_murnaghan_refine** | From BM + struct | Yes (V0) | No | No | Yes (BM fit) | No |
+| **fukui_analysis** | From batch | No | No | No | Yes (batch) | No |
 
 \* Conditional on calculation type (see [Conditional Outputs](#5-conditional-outputs))
 
@@ -798,13 +820,46 @@ stages = [
 
 ---
 
+### Example 4: Birch-Murnaghan EOS Pipeline
+
+```python
+stages = [
+    {
+        'name': 'volume_scan',
+        'type': 'batch',
+        'structure_from': 'input',
+        'base_incar': {'encut': 520, 'ediff': 1e-6, 'nsw': 0, 'ismear': 0},
+        'kpoints_spacing': 0.03,
+        'calculations': volume_calcs,  # 7 volume-scaled structures
+    },
+    {
+        'name': 'eos_fit',
+        'type': 'birch_murnaghan',
+        'batch_from': 'volume_scan',       # EOS from batch energies
+        'volumes': volume_map,             # {label: volume_A3}
+    },
+    {
+        'name': 'eos_refine',
+        'type': 'birch_murnaghan_refine',
+        'eos_from': 'eos_fit',             # Zoom in around V0
+        'structure_from': 'input',
+        'base_incar': {'encut': 520, 'ediff': 1e-6, 'nsw': 0, 'ismear': 0},
+        'kpoints_spacing': 0.03,
+        'refine_strain_range': 0.02,       # +/-2% around V0
+        'refine_n_points': 7,
+    },
+]
+```
+
+---
+
 ## Summary
 
 The Quantum Lego brick system provides:
 
-1. **13 Brick Types**: 5 structure-producing, 2 non-structure computation, 6 analysis
-2. **15 Port Types**: Typed data flow with validation
-3. **9 Source Modes**: Flexible connection patterns
+1. **16 Brick Types**: 5 structure-producing, 2 non-structure computation, 2 EOS, 7 analysis
+2. **16 Port Types**: Typed data flow with validation
+3. **11 Source Modes**: Flexible connection patterns
 4. **Automatic Validation**: Type checking, prerequisite checking, warning system
 5. **Common Patterns**: Sequential, batch, restart chaining, multi-stage analysis
 

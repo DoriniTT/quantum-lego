@@ -621,50 +621,21 @@ class TestBuildRecommendedStructure:
 
 
 # ---------------------------------------------------------------------------
-# TestBuildRefinedStructures (requires AiiDA)
+# TestComputeRefinedEosParams (requires AiiDA)
 # ---------------------------------------------------------------------------
 
 @pytest.mark.tier1
-class TestBuildRefinedStructures:
-    """Test build_refined_structures calcfunction."""
-
-    def _make_structure(self):
-        from aiida import orm
-
-        structure = orm.StructureData(
-            cell=[[3.0, 0.0, 0.0], [0.0, 3.0, 0.0], [0.0, 0.0, 3.0]]
-        )
-        structure.append_atom(position=(0.0, 0.0, 0.0), symbols='Si')
-        return structure
-
-    def test_returns_correct_number_of_structures(self):
-        from aiida import orm
-        from quantum_lego.core.common.eos_tasks import build_refined_structures
-
-        structure = self._make_structure()
-        eos_result = orm.Dict(dict={'v0': 27.0})
-
-        result = build_refined_structures._callable(
-            structure, eos_result,
-            orm.Float(0.02), orm.Int(7),
-        )
-
-        # Should have 7 structures + volumes + labels
-        for i in range(7):
-            label = f'refine_{i:02d}'
-            assert label in result
-            assert isinstance(result[label], orm.StructureData)
+class TestComputeRefinedEosParams:
+    """Test compute_refined_eos_params calcfunction."""
 
     def test_returns_volumes_list(self):
         from aiida import orm
-        from quantum_lego.core.common.eos_tasks import build_refined_structures
+        from quantum_lego.core.common.eos_tasks import compute_refined_eos_params
 
-        structure = self._make_structure()
         eos_result = orm.Dict(dict={'v0': 27.0})
 
-        result = build_refined_structures._callable(
-            structure, eos_result,
-            orm.Float(0.02), orm.Int(5),
+        result = compute_refined_eos_params._callable(
+            eos_result, orm.Float(0.02), orm.Int(5),
         )
 
         assert 'volumes' in result
@@ -674,14 +645,12 @@ class TestBuildRefinedStructures:
 
     def test_returns_labels_list(self):
         from aiida import orm
-        from quantum_lego.core.common.eos_tasks import build_refined_structures
+        from quantum_lego.core.common.eos_tasks import compute_refined_eos_params
 
-        structure = self._make_structure()
         eos_result = orm.Dict(dict={'v0': 27.0})
 
-        result = build_refined_structures._callable(
-            structure, eos_result,
-            orm.Float(0.02), orm.Int(5),
+        result = compute_refined_eos_params._callable(
+            eos_result, orm.Float(0.02), orm.Int(5),
         )
 
         assert 'labels' in result
@@ -693,16 +662,14 @@ class TestBuildRefinedStructures:
 
     def test_volumes_span_correct_range(self):
         from aiida import orm
-        from quantum_lego.core.common.eos_tasks import build_refined_structures
+        from quantum_lego.core.common.eos_tasks import compute_refined_eos_params
 
-        structure = self._make_structure()
         v0 = 27.0
         sr = 0.02
         eos_result = orm.Dict(dict={'v0': v0})
 
-        result = build_refined_structures._callable(
-            structure, eos_result,
-            orm.Float(sr), orm.Int(5),
+        result = compute_refined_eos_params._callable(
+            eos_result, orm.Float(sr), orm.Int(5),
         )
 
         volumes = result['volumes'].get_list()
@@ -712,22 +679,84 @@ class TestBuildRefinedStructures:
         assert abs(volumes[0] - expected_min) < 0.01
         assert abs(volumes[-1] - expected_max) < 0.01
 
-    def test_structure_volumes_match_target(self):
+    def test_seven_points(self):
         from aiida import orm
-        from quantum_lego.core.common.eos_tasks import build_refined_structures
+        from quantum_lego.core.common.eos_tasks import compute_refined_eos_params
 
-        structure = self._make_structure()
-        v0 = 27.0
-        eos_result = orm.Dict(dict={'v0': v0})
+        eos_result = orm.Dict(dict={'v0': 75.0})
 
-        result = build_refined_structures._callable(
-            structure, eos_result,
-            orm.Float(0.02), orm.Int(5),
+        result = compute_refined_eos_params._callable(
+            eos_result, orm.Float(0.03), orm.Int(7),
         )
 
         volumes = result['volumes'].get_list()
-        for i in range(5):
-            label = f'refine_{i:02d}'
-            struct = result[label]
-            actual_vol = struct.get_pymatgen().volume
-            assert abs(actual_vol - volumes[i]) < 0.01
+        labels = result['labels'].get_list()
+        assert len(volumes) == 7
+        assert len(labels) == 7
+
+
+# ---------------------------------------------------------------------------
+# TestBuildSingleRefinedStructure (requires AiiDA)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestBuildSingleRefinedStructure:
+    """Test build_single_refined_structure calcfunction."""
+
+    def _make_structure(self):
+        from aiida import orm
+
+        structure = orm.StructureData(
+            cell=[[3.0, 0.0, 0.0], [0.0, 3.0, 0.0], [0.0, 0.0, 3.0]]
+        )
+        structure.append_atom(position=(0.0, 0.0, 0.0), symbols='Si')
+        return structure
+
+    def test_returns_structure_data(self):
+        from aiida import orm
+        from quantum_lego.core.common.eos_tasks import build_single_refined_structure
+
+        structure = self._make_structure()
+        eos_result = orm.Dict(dict={'v0': 27.0})
+
+        result = build_single_refined_structure._callable(
+            structure, eos_result,
+            orm.Float(0.02), orm.Int(5), orm.Int(0),
+        )
+
+        assert isinstance(result, orm.StructureData)
+
+    def test_volume_matches_expected(self):
+        import numpy as np
+        from aiida import orm
+        from quantum_lego.core.common.eos_tasks import build_single_refined_structure
+
+        structure = self._make_structure()
+        v0 = 27.0
+        sr = 0.02
+        n = 5
+        eos_result = orm.Dict(dict={'v0': v0})
+
+        for idx in range(n):
+            result = build_single_refined_structure._callable(
+                structure, eos_result,
+                orm.Float(sr), orm.Int(n), orm.Int(idx),
+            )
+            frac = np.linspace(-1, 1, n)[idx]
+            expected_vol = v0 * (1 + frac * sr)
+            actual_vol = result.get_pymatgen().volume
+            assert abs(actual_vol - expected_vol) < 0.01
+
+    def test_preserves_atom_count(self):
+        from aiida import orm
+        from quantum_lego.core.common.eos_tasks import build_single_refined_structure
+
+        structure = self._make_structure()
+        eos_result = orm.Dict(dict={'v0': 27.0})
+
+        result = build_single_refined_structure._callable(
+            structure, eos_result,
+            orm.Float(0.02), orm.Int(5), orm.Int(2),
+        )
+
+        assert len(result.sites) == 1

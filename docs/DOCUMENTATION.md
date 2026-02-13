@@ -151,7 +151,7 @@ result = quick_vasp_sequential(structure, stages=stages, ...)
 
 ## Brick Types
 
-Quantum Lego provides **13 brick types** for different calculation workflows. Each brick follows the same pattern:
+Quantum Lego provides **16 brick types** for different calculation workflows. Each brick follows the same pattern:
 
 ```python
 # Each brick exports:
@@ -497,6 +497,93 @@ graph LR
 ```
 
 **Use cases:** Large-scale DFT, hybrid functionals, QM/MM simulations
+
+### 12. Birch-Murnaghan Brick (`birch_murnaghan`)
+
+Fits a third-order Birch-Murnaghan equation of state from batch VASP energies at different volumes.
+
+```mermaid
+graph LR
+    A[Batch Energies] --> B[Birch-Murnaghan Brick]
+    B --> C[EOS Result<br/>V0, B0, B0']
+    B --> D[Recommended Structure<br/>scaled to V0]
+
+    style B fill:#E91E63,color:#fff
+```
+
+**Use cases:** Equilibrium volume determination, bulk modulus calculation, equation of state fitting
+
+**Inputs:**
+- `batch_from`: Name of a previous `batch` stage providing volume-energy data
+- `volumes`: Dict mapping batch labels to volumes in A^3
+
+**Outputs:**
+- `eos_result`: Dict with V0, E0, B0 (GPa), B0', RMS residual, recommended label
+- `recommended_structure`: StructureData scaled to the fitted equilibrium volume V0
+
+**Example:**
+```python
+stages = [
+    {
+        'name': 'volume_scan',
+        'type': 'batch',
+        'structure_from': 'input',
+        'base_incar': {'encut': 520, 'ediff': 1e-6, 'nsw': 0, 'ismear': 0},
+        'kpoints_spacing': 0.03,
+        'calculations': volume_calcs,  # {label: {'structure': StructureData}}
+    },
+    {
+        'name': 'eos_fit',
+        'type': 'birch_murnaghan',
+        'batch_from': 'volume_scan',
+        'volumes': volume_map,  # {label: volume_A3}
+    },
+]
+```
+
+### 13. Birch-Murnaghan Refine Brick (`birch_murnaghan_refine`)
+
+Performs a zoomed-in BM scan around V0 from a previous BM fit. Generates volume-scaled structures, runs single-point VASP calculations, and fits a refined EOS.
+
+```mermaid
+graph LR
+    A[Previous BM Result] --> B[BM Refine Brick]
+    C[Input Structure] --> B
+    B --> D[Refined EOS Result<br/>V0, B0, B0']
+    B --> E[Refined Structure<br/>scaled to refined V0]
+
+    style B fill:#E91E63,color:#fff
+```
+
+**Use cases:** High-precision equilibrium volume, improved bulk modulus after initial coarse scan
+
+**Inputs:**
+- `eos_from`: Name of a previous `birch_murnaghan` stage (provides V0 for centering)
+- `structure_from`: Base structure for volume scaling (`'input'` or a previous stage)
+- `base_incar`: INCAR parameters for the single-point VASP calculations
+- `refine_strain_range`: Strain range around V0 (default: 0.02 = +/-2%)
+- `refine_n_points`: Number of volume points (default: 7, minimum: 4)
+
+**Outputs:**
+- `eos_result`: Dict with refined V0, E0, B0, B0', RMS residual
+- `recommended_structure`: StructureData scaled to refined V0
+
+**Example:**
+```python
+stages = [
+    # ... batch + birch_murnaghan stages above ...
+    {
+        'name': 'eos_refine',
+        'type': 'birch_murnaghan_refine',
+        'eos_from': 'eos_fit',
+        'structure_from': 'input',
+        'base_incar': {'encut': 520, 'ediff': 1e-6, 'nsw': 0, 'ismear': 0},
+        'kpoints_spacing': 0.03,
+        'refine_strain_range': 0.02,   # +/-2% around V0
+        'refine_n_points': 7,
+    },
+]
+```
 
 ---
 

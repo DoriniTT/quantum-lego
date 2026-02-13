@@ -9,6 +9,7 @@ This guide provides visual diagrams for common computational workflows using Qua
 - [Batch Operations](#batch-operations)
 - [Advanced Multi-Stage Workflows](#advanced-multi-stage-workflows)
 - [NEB Calculations](#neb-calculations)
+- [Birch-Murnaghan EOS](#birch-murnaghan-eos)
 - [Port Connection Patterns](#port-connection-patterns)
 
 ---
@@ -598,6 +599,98 @@ adsorption_energy = adsorbed_energy - clean_energy
 
 ---
 
+## Birch-Murnaghan EOS
+
+### Coarse + Refined EOS Pipeline
+
+```mermaid
+graph TD
+    INPUT[Input Structure] --> SCALE[Volume Scaling<br/>7 points, ±6%]
+    SCALE --> BATCH[BATCH Brick<br/>Parallel SCF]
+
+    BATCH -->|energies + volumes| BM[BIRCH_MURNAGHAN<br/>EOS Fit]
+    BM -->|V0, B0, B0'| EOS1[Coarse EOS Result]
+    BM -->|structure @ V0| REC1[Recommended Structure]
+
+    BM -->|V0| REFINE[BM_REFINE<br/>±2% around V0<br/>7 new points]
+    INPUT --> REFINE
+    REFINE -->|V0, B0, B0'| EOS2[Refined EOS Result]
+    REFINE -->|structure @ V0| REC2[Refined Structure]
+
+    style BATCH fill:#2196F3,stroke:#1565C0,color:#fff
+    style BM fill:#E91E63,stroke:#AD1457,color:#fff
+    style REFINE fill:#E91E63,stroke:#AD1457,color:#fff
+    style INPUT fill:#FFD54F,stroke:#F57F17,color:#000
+    style SCALE fill:#E3F2FD,stroke:#1976D2
+    style EOS1 fill:#F48FB1,stroke:#C2185B,color:#fff
+    style EOS2 fill:#F48FB1,stroke:#C2185B,color:#fff
+    style REC1 fill:#FFF3E0,stroke:#F57C00
+    style REC2 fill:#FFF3E0,stroke:#F57C00
+```
+
+**Code:**
+```python
+import numpy as np
+from ase.io import read
+from aiida import orm
+from quantum_lego import quick_vasp_sequential
+
+atoms = read('sno2.vasp')
+strains = np.linspace(-0.06, 0.06, 7)
+volume_calcs, volume_map = {}, {}
+for strain in strains:
+    sign = 'm' if strain < 0 else 'p'
+    label = f'v_{sign}{abs(strain * 100):03.0f}'
+    scale = (1.0 + strain) ** (1.0 / 3.0)
+    scaled = atoms.copy()
+    scaled.set_cell(atoms.cell * scale, scale_atoms=True)
+    volume_calcs[label] = {'structure': orm.StructureData(ase=scaled)}
+    volume_map[label] = scaled.get_volume()
+
+stages = [
+    {
+        'name': 'volume_scan',
+        'type': 'batch',
+        'structure_from': 'input',
+        'base_incar': {'encut': 520, 'ediff': 1e-6, 'nsw': 0, 'ismear': 0},
+        'kpoints_spacing': 0.03,
+        'calculations': volume_calcs,
+    },
+    {
+        'name': 'eos_fit',
+        'type': 'birch_murnaghan',
+        'batch_from': 'volume_scan',
+        'volumes': volume_map,
+    },
+    {
+        'name': 'eos_refine',
+        'type': 'birch_murnaghan_refine',
+        'eos_from': 'eos_fit',
+        'structure_from': 'input',
+        'base_incar': {'encut': 520, 'ediff': 1e-6, 'nsw': 0, 'ismear': 0},
+        'kpoints_spacing': 0.03,
+        'refine_strain_range': 0.02,
+        'refine_n_points': 7,
+    },
+]
+
+result = quick_vasp_sequential(
+    structure=orm.StructureData(ase=atoms),
+    stages=stages,
+    code_label='VASP-6.5.1@localwork',
+    ...
+)
+```
+
+**Key Points:**
+- Coarse scan: 7 volumes from -6% to +6% strain
+- `birch_murnaghan` fits V0, B0, B0' from batch energies
+- `birch_murnaghan_refine` zooms in around V0 with ±2% strain
+- Refined fit typically reduces RMS residual by ~5-10x
+- Both stages produce a `recommended_structure` scaled to the fitted V0
+
+---
+
 ## Summary
 
 ### Brick Color Code
@@ -611,6 +704,7 @@ adsorption_energy = adsorbed_energy - clean_energy
 - ⚫ **Gray (NEB)**: Reaction pathways
 - 🔵 **Indigo (QE/CP2K)**: Alternative DFT codes
 - 🔷 **Cyan (Convergence)**: Parameter optimization
+- 🔴 **Pink (Birch-Murnaghan)**: Equation of state fitting
 
 ### Key Principles
 

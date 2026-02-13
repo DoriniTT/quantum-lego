@@ -16,7 +16,7 @@ cd /home/trevizam/git/quantum-lego
 pytest tests/ -m tier1 -v                     # Tier1: Pure Python tests (fast, no AiiDA)
 pytest tests/ -m tier2 -v                     # Tier2: AiiDA integration (no VASP, ~20s)
 pytest tests/ -m tier3 -v                     # Tier3: Real VASP results (requires pre-computed PKs)
-pytest tests/ -v                              # Run all tests (498 tests)
+pytest tests/ -v                              # Run all tests (561 tests)
 
 # Linting
 flake8 quantum_lego/ --max-line-length=120 --ignore=E501,W503,E402,F401
@@ -64,7 +64,7 @@ quantum-lego/                    # Git repository root
 │       ├── utils.py              # Status, restart, file handling
 │       ├── retrieve_defaults.py  # Default VASP retrieve file lists
 │       ├── bricks/               # Brick modules (stage types)
-│       │   ├── __init__.py       # BRICK_REGISTRY (13 types)
+│       │   ├── __init__.py       # BRICK_REGISTRY (16 types)
 │       │   ├── connections.py    # PORTS declarations + validation (pure Python)
 │       │   ├── vasp.py           # VASP brick (relaxation, SCF, etc.)
 │       │   ├── dos.py            # DOS brick (BandsWorkChain wrapper)
@@ -78,7 +78,10 @@ quantum-lego/                    # Git repository root
 │       │   ├── qe.py             # Quantum ESPRESSO (PwBaseWorkChain)
 │       │   ├── cp2k.py           # CP2K (Cp2kBaseWorkChain)
 │       │   ├── generate_neb_images.py # NEB image interpolation/generation
-│       │   └── neb.py            # NEB workflow (vasp.neb)
+│       │   ├── neb.py            # NEB workflow (vasp.neb)
+│       │   ├── birch_murnaghan.py  # Birch-Murnaghan EOS fitting
+│       │   ├── birch_murnaghan_refine.py # BM EOS refinement round
+│       │   └── fukui_analysis.py # Fukui index analysis
 │       ├── calcs/                # Custom AiiDA calculation plugins
 │       │   ├── __init__.py
 │       │   └── aimd_vasp.py      # AIMD VASP calculation with velocity injection
@@ -88,9 +91,10 @@ quantum-lego/                    # Git repository root
 │           ├── fixed_atoms.py    # Selective dynamics (atom fixing)
 │           ├── aimd_functions.py # AIMD helper functions
 │           ├── aimd/             # AIMD submodule
+│           ├── eos_tasks.py      # EOS calcfunctions (gather, fit, recommend)
 │           ├── convergence/      # Convergence submodule
 │           └── u_calculation/    # Hubbard U calculation submodule
-├── tests/                        # Test suite (498 tests)
+├── tests/                        # Test suite (561 tests)
 │   ├── conftest.py               # Pytest config, fixtures, markers
 │   ├── test_lego_connections.py  # Port/connection validation (tier1)
 │   ├── test_lego_bricks.py       # Brick validate_stage() (tier1)
@@ -161,7 +165,7 @@ get_stage_results()      # Extract results from completed WorkGraph
 print_stage_results()    # Format results for display
 ```
 
-### Available Brick Types (13)
+### Available Brick Types (16)
 
 | Type | Module | Description |
 |------|--------|-------------|
@@ -178,14 +182,17 @@ print_stage_results()    # Format results for display
 | `cp2k` | `bricks/cp2k.py` | CP2K calculations |
 | `generate_neb_images` | `bricks/generate_neb_images.py` | NEB image generation |
 | `neb` | `bricks/neb.py` | NEB calculation via vasp.neb |
+| `birch_murnaghan` | `bricks/birch_murnaghan.py` | Birch-Murnaghan EOS fitting from batch energies |
+| `birch_murnaghan_refine` | `bricks/birch_murnaghan_refine.py` | Refined BM EOS scan around V0 |
+| `fukui_analysis` | `bricks/fukui_analysis.py` | Fukui index analysis from batch charges |
 
 ### Port System (`connections.py`)
 
 Pure Python module (no AiiDA dependency) declaring typed inputs/outputs for each brick.
 
-**Port types:** `structure`, `energy`, `misc`, `remote_folder`, `retrieved`, `dos_data`, `projectors`, `bader_charges`, `trajectory`, `convergence`, `file`, `hubbard_responses`, `hubbard_occupation`, `hubbard_result`, `neb_images`
+**Port types:** `structure`, `energy`, `misc`, `remote_folder`, `retrieved`, `dos_data`, `projectors`, `bader_charges`, `trajectory`, `convergence`, `file`, `hubbard_responses`, `hubbard_occupation`, `hubbard_result`, `neb_images`, `eos_result`
 
-**Source resolution modes:** `auto`, `structure_from`, `charge_from`, `restart`, `ground_state_from`, `response_from`, and explicit stage-level `structure` overrides (for bricks that support it, e.g., `vasp`, `dos`)
+**Source resolution modes:** `auto`, `structure_from`, `charge_from`, `restart`, `ground_state_from`, `response_from`, `batch_from`, `eos_from`, and explicit stage-level `structure` overrides (for bricks that support it, e.g., `vasp`, `dos`)
 
 ### Sequential Workflows
 
@@ -248,7 +255,7 @@ Reference example: `examples/vasp/run_mixed_dos_sources.py`.
 pytest tests/ -m tier1 -v          # Fast, always runs
 pytest tests/ -m tier2 -v          # AiiDA integration (creates DB processes)
 pytest tests/ -m tier3 -v          # End-to-end (needs reference PKs)
-pytest tests/ -v                   # All 498 tests
+pytest tests/ -v                   # All 561 tests
 ```
 
 ### Test Markers

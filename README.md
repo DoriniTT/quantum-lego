@@ -2,7 +2,7 @@
 
 Lightweight, incremental VASP calculation module for exploratory work.
 
-📚 **[Brick Connection Guide](docs/BRICK_CONNECTIONS.md)** - Visual guide showing how all 13 brick types connect together like Lego pieces
+📚 **[Brick Connection Guide](docs/BRICK_CONNECTIONS.md)** - Visual guide showing how all 16 brick types connect together like Lego pieces
 
 ## Design Philosophy
 
@@ -456,13 +456,17 @@ quantum_lego/core/
 │   ├── qe.py        # QE brick
 │   ├── cp2k.py      # CP2K brick
 │   ├── generate_neb_images.py # NEB image generator brick
-│   └── neb.py       # vasp.neb brick
+│   ├── neb.py       # vasp.neb brick
+│   ├── birch_murnaghan.py # Birch-Murnaghan EOS fitting
+│   ├── birch_murnaghan_refine.py # BM EOS refinement round
+│   └── fukui_analysis.py # Fukui index analysis
 ├── calcs/           # Custom AiiDA calculation plugins
 │   └── aimd_vasp.py # AIMD VASP with velocity injection
 └── common/          # Shared utilities
     ├── utils.py     # deep_merge_dicts, logging, helpers
     ├── constants.py # Physical constants
     ├── fixed_atoms.py # Selective dynamics
+    ├── eos_tasks.py # EOS calcfunctions (gather, fit, recommend)
     ├── aimd/        # AIMD submodule
     ├── convergence/ # Convergence submodule
     └── u_calculation/ # Hubbard U submodule

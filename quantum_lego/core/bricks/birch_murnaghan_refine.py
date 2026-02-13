@@ -22,7 +22,8 @@ from ..common.eos_tasks import (
     gather_eos_data,
     fit_birch_murnaghan_eos,
     build_recommended_structure,
-    build_refined_structures,
+    compute_refined_eos_params,
+    build_single_refined_structure,
 )
 
 
@@ -87,11 +88,12 @@ def create_stage_tasks(wg, stage, stage_name, context):
     """Create birch_murnaghan_refine stage tasks in the WorkGraph.
 
     Creates:
-    1. build_refined_structures: generates N structures around V0
-    2. N VASP tasks + energy extraction tasks
-    3. gather_eos_data: collects volume-energy pairs
-    4. fit_birch_murnaghan_eos: fits refined EOS
-    5. build_recommended_structure: scales to refined V0
+    1. compute_refined_eos_params: computes target volumes and labels
+    2. N build_single_refined_structure tasks: one scaled structure per point
+    3. N VASP tasks + energy extraction tasks
+    4. gather_eos_data: collects volume-energy pairs
+    5. fit_birch_murnaghan_eos: fits refined EOS
+    6. build_recommended_structure: scales to refined V0
 
     Args:
         wg: WorkGraph to add tasks to.
@@ -135,14 +137,17 @@ def create_stage_tasks(wg, stage, stage_name, context):
     n_points = stage.get('refine_n_points', 7)
     strain_range = stage.get('refine_strain_range', 0.02)
 
-    # Create build_refined_structures task
-    build_task = wg.add_task(
-        build_refined_structures,
-        name=f'build_refined_{stage_name}',
-        structure=input_structure,
+    # Shared orm parameters for structure tasks
+    strain_range_node = orm.Float(strain_range)
+    n_points_node = orm.Int(n_points)
+
+    # Compute volumes and labels (declared outputs: 'volumes', 'labels')
+    params_task = wg.add_task(
+        compute_refined_eos_params,
+        name=f'params_{stage_name}',
         eos_result=eos_result_socket,
-        strain_range=orm.Float(strain_range),
-        n_points=orm.Int(n_points),
+        strain_range=strain_range_node,
+        n_points=n_points_node,
     )
 
     # VASP setup
@@ -166,16 +171,27 @@ def create_stage_tasks(wg, stage, stage_name, context):
         kpoints_mesh=stage_kpoints_mesh,
     )
 
-    # Create VASP + energy tasks for each refine point
+    # Create structure + VASP + energy tasks for each refine point
     energy_tasks = {}
     calc_tasks = {}
+    struct_tasks = {}
     for i in range(n_points):
         label = f'refine_{i:02d}'
+
+        struct_task = wg.add_task(
+            build_single_refined_structure,
+            name=f'struct_{stage_name}_{label}',
+            structure=input_structure,
+            eos_result=eos_result_socket,
+            strain_range=strain_range_node,
+            n_points=n_points_node,
+            point_index=orm.Int(i),
+        )
 
         vasp_task = wg.add_task(
             VaspTask,
             name=f'vasp_{stage_name}_{label}',
-            structure=build_task.outputs[label],
+            structure=struct_task.outputs.result,
             code=code,
             **builder_inputs,
         )
@@ -187,6 +203,7 @@ def create_stage_tasks(wg, stage, stage_name, context):
             retrieved=vasp_task.outputs.retrieved,
         )
 
+        struct_tasks[label] = struct_task
         calc_tasks[label] = vasp_task
         energy_tasks[label] = energy_task
 
@@ -197,8 +214,8 @@ def create_stage_tasks(wg, stage, stage_name, context):
     gather_task = wg.add_task(
         gather_eos_data,
         name=f'gather_refined_{stage_name}',
-        volumes=build_task.outputs['volumes'],
-        labels=build_task.outputs['labels'],
+        volumes=params_task.outputs.volumes,
+        labels=params_task.outputs.labels,
         **energy_kwargs,
     )
 
@@ -218,7 +235,8 @@ def create_stage_tasks(wg, stage, stage_name, context):
     )
 
     return {
-        'build': build_task,
+        'params': params_task,
+        'struct_tasks': struct_tasks,
         'calc_tasks': calc_tasks,
         'energy_tasks': energy_tasks,
         'gather': gather_task,
