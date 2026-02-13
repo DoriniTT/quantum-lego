@@ -207,6 +207,38 @@ BIRCH_MURNAGHAN_PORTS = {
             'type': 'eos_result',
             'description': 'Birch-Murnaghan EOS fit results (V0, E0, B0, B1)',
         },
+        'recommended_structure': {
+            'type': 'structure',
+            'description': 'Structure scaled to equilibrium volume V0',
+        },
+    },
+}
+
+BIRCH_MURNAGHAN_REFINE_PORTS = {
+    'inputs': {
+        'eos_result': {
+            'type': 'eos_result',
+            'required': True,
+            'source': 'eos_from',
+            'compatible_bricks': ['birch_murnaghan'],
+            'description': 'EOS result from initial BM fit (provides V0)',
+        },
+        'structure': {
+            'type': 'structure',
+            'required': True,
+            'source': 'structure_from',
+            'description': 'Base structure for volume scaling',
+        },
+    },
+    'outputs': {
+        'eos_result': {
+            'type': 'eos_result',
+            'description': 'Refined BM EOS fit results',
+        },
+        'recommended_structure': {
+            'type': 'structure',
+            'description': 'Structure scaled to refined V0',
+        },
     },
 }
 
@@ -613,6 +645,7 @@ ALL_PORTS = {
     'batch': BATCH_PORTS,
     'fukui_analysis': FUKUI_ANALYSIS_PORTS,
     'birch_murnaghan': BIRCH_MURNAGHAN_PORTS,
+    'birch_murnaghan_refine': BIRCH_MURNAGHAN_REFINE_PORTS,
     'bader': BADER_PORTS,
     'hubbard_response': HUBBARD_RESPONSE_PORTS,
     'hubbard_analysis': HUBBARD_ANALYSIS_PORTS,

@@ -50,7 +50,7 @@ def gather_eos_data(
             )
         energy_node = energy_kwargs[label]
         energy = energy_node.value if hasattr(energy_node, 'value') else float(energy_node)
-        pairs.append((float(vol), energy))
+        pairs.append((float(vol), energy, label))
 
     # Sort by volume
     pairs.sort(key=lambda p: p[0])
@@ -58,6 +58,7 @@ def gather_eos_data(
     return orm.Dict(dict={
         'volumes': [p[0] for p in pairs],
         'energies': [p[1] for p in pairs],
+        'labels': [p[2] for p in pairs],
     })
 
 
@@ -123,7 +124,8 @@ def fit_birch_murnaghan_eos(
     residuals = energies - fitted_energies
     rms_residual = float(np.sqrt(np.mean(residuals**2)))
 
-    return orm.Dict(dict={
+    # Find recommended data point (closest volume to V0)
+    result_dict = {
         'v0': v0,
         'e0': e0,
         'b0_eV_per_A3': b0_eV_A3,
@@ -134,4 +136,84 @@ def fit_birch_murnaghan_eos(
         'n_points': len(volumes),
         'residuals_eV': residuals.tolist(),
         'rms_residual_eV': rms_residual,
-    })
+    }
+
+    labels = data.get('labels')
+    if labels is not None:
+        labels = np.array(labels)[sort_idx].tolist()
+        result_dict['labels'] = labels
+        # Find the data point closest to V0
+        vol_diffs = np.abs(volumes - v0)
+        closest_idx = int(np.argmin(vol_diffs))
+        closest_vol = float(volumes[closest_idx])
+        result_dict['recommended_label'] = labels[closest_idx]
+        result_dict['recommended_volume'] = closest_vol
+        result_dict['recommended_volume_error_pct'] = (
+            abs(closest_vol - v0) / v0 * 100.0
+        )
+
+    return orm.Dict(dict=result_dict)
+
+
+@task.calcfunction
+def build_recommended_structure(
+    structure: orm.StructureData,
+    eos_result: orm.Dict,
+) -> orm.StructureData:
+    """Scale input structure uniformly to the fitted equilibrium volume V0.
+
+    Args:
+        structure: Base structure to scale.
+        eos_result: Dict from fit_birch_murnaghan_eos containing 'v0'.
+
+    Returns:
+        StructureData scaled to V0.
+    """
+    pmg = structure.get_pymatgen()
+    v0 = eos_result['v0']
+    pmg.scale_lattice(v0)
+    return orm.StructureData(pymatgen=pmg)
+
+
+@task.calcfunction
+def build_refined_structures(
+    structure: orm.StructureData,
+    eos_result: orm.Dict,
+    strain_range: orm.Float,
+    n_points: orm.Int,
+) -> dict:
+    """Generate N volume-scaled structures around V0 for refined EOS scan.
+
+    Creates structures uniformly distributed in the range
+    [V0*(1 - strain_range), V0*(1 + strain_range)].
+
+    Args:
+        structure: Base structure for scaling.
+        eos_result: Dict from fit_birch_murnaghan_eos containing 'v0'.
+        strain_range: Fractional range around V0 (e.g. 0.02 for +/-2%).
+        n_points: Number of volume points to generate.
+
+    Returns:
+        Dict with:
+            - 'refine_00', 'refine_01', ...: StructureData nodes
+            - 'volumes': orm.List of target volumes
+            - 'labels': orm.List of labels
+    """
+    v0 = eos_result['v0']
+    n = n_points.value
+    sr = strain_range.value
+
+    results = {}
+    volumes, labels = [], []
+    for i, frac in enumerate(np.linspace(-1, 1, n)):
+        target_vol = v0 * (1 + frac * sr)
+        label = f'refine_{i:02d}'
+        pmg = structure.get_pymatgen()
+        pmg.scale_lattice(target_vol)
+        results[label] = orm.StructureData(pymatgen=pmg)
+        volumes.append(target_vol)
+        labels.append(label)
+
+    results['volumes'] = orm.List(list=volumes)
+    results['labels'] = orm.List(list=labels)
+    return results

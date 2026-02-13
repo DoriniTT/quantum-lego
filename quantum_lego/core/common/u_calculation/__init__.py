@@ -53,6 +53,7 @@ from .utils import (
     build_ldau_arrays,
     validate_target_species,
     get_species_order_from_structure,
+    prepare_perturbed_structure,
     DEFAULT_POTENTIAL_VALUES,
 )
 
@@ -76,5 +77,6 @@ __all__ = [
     'build_ldau_arrays',
     'validate_target_species',
     'get_species_order_from_structure',
+    'prepare_perturbed_structure',
     'DEFAULT_POTENTIAL_VALUES',
 ]

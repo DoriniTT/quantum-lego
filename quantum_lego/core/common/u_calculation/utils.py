@@ -81,7 +81,7 @@ def build_ldau_arrays(
     all_species: t.List[str],
     ldaul_value: int,
     potential_value: float,
-    ldauj_value: float = 0.0,
+    ldauj_value: t.Optional[float] = None,
 ) -> t.Tuple[t.List[int], t.List[float], t.List[float]]:
     """
     Build LDAUL, LDAUU, LDAUJ arrays for multi-species system.
@@ -89,25 +89,31 @@ def build_ldau_arrays(
     VASP requires these arrays in the order of species in POTCAR.
     Target species gets the specified L and U values, others get -1 and 0.
 
+    For LDAUTYPE=3 (linear response), LDAUJ must equal LDAUU to apply the
+    same potential to both spin channels. When ldauj_value is None (default),
+    LDAUJ is automatically set equal to LDAUU.
+
     Args:
-        target_species: Element symbol for Hubbard U calculation (e.g., 'Fe')
-        all_species: List of all element symbols in POTCAR order
+        target_species: Species name for Hubbard U calculation (e.g., 'Fe',
+            or a kind name like 'Sn' for split-species structures)
+        all_species: List of all species/kind names in POTCAR order
         ldaul_value: Angular momentum (2 for d-electrons, 3 for f-electrons)
         potential_value: Applied potential V (eV) - this goes into LDAUU
-        ldauj_value: Exchange J value (typically 0 for linear response)
+        ldauj_value: Exchange J value. None (default) = same as LDAUU,
+            which is correct for LDAUTYPE=3
 
     Returns:
         Tuple of (ldaul_list, ldauu_list, ldauj_list)
 
     Example:
         >>> ldaul, ldauu, ldauj = build_ldau_arrays(
-        ...     target_species='Fe',
-        ...     all_species=['Fe', 'O'],
+        ...     target_species='Sn',
+        ...     all_species=['Sn', 'Sn1', 'O'],
         ...     ldaul_value=2,
         ...     potential_value=0.1,
         ... )
-        >>> print(f"LDAUL={ldaul}, LDAUU={ldauu}")
-        LDAUL=[2, -1], LDAUU=[0.1, 0.0]
+        >>> print(f"LDAUL={ldaul}, LDAUU={ldauu}, LDAUJ={ldauj}")
+        LDAUL=[2, -1, -1], LDAUU=[-0.1, 0.0, 0.0], LDAUJ=[-0.1, 0.0, 0.0]
     """
     ldaul = []
     ldauu = []
@@ -119,7 +125,8 @@ def build_ldau_arrays(
             # Negate potential to match VASP convention:
             # Positive V should increase d-occupation
             ldauu.append(-potential_value)
-            ldauj.append(ldauj_value)
+            # For LDAUTYPE=3, LDAUJ must equal LDAUU (same potential on both spins)
+            ldauj.append(-potential_value if ldauj_value is None else ldauj_value)
         else:
             ldaul.append(-1)  # No LDA+U for this species
             ldauu.append(0.0)
@@ -244,34 +251,50 @@ def validate_target_species(
     """
     Validate that target species exists in structure.
 
+    Accepts both element symbols and AiiDA kind names (for split species).
+
     Args:
         structure: AiiDA StructureData or any object with get_ase() method
-        target_species: Element symbol to validate
+        target_species: Element symbol or kind name to validate
 
     Raises:
         ValueError: If target_species is not found in structure
 
     Example:
         >>> validate_target_species(fe2o3_structure, 'Fe')  # OK
+        >>> validate_target_species(split_structure, 'Sn')  # OK (kind name)
         >>> validate_target_species(fe2o3_structure, 'Ni')  # Raises ValueError
     """
-    # Handle both AiiDA StructureData and plain structures
+    # AiiDA StructureData: check kind names first (supports split species)
+    if hasattr(structure, 'sites'):
+        kind_names = {site.kind_name for site in structure.sites}
+        if target_species in kind_names:
+            return  # Valid kind name
+
+    # Fallback: element symbol check
     if hasattr(structure, 'get_ase'):
         ase_struct = structure.get_ase()
     elif hasattr(structure, 'get_chemical_symbols'):
         ase_struct = structure
     else:
         raise TypeError(
-            f"structure must have get_ase() or get_chemical_symbols() method, "
+            f"structure must have get_ase(), sites, or get_chemical_symbols() method, "
             f"got {type(structure).__name__}"
         )
 
     symbols = set(ase_struct.get_chemical_symbols())
 
     if target_species not in symbols:
+        # Build helpful error message with both kind names and symbols
+        available = sorted(symbols)
+        if hasattr(structure, 'sites'):
+            kind_names = sorted({site.kind_name for site in structure.sites})
+            available_str = f"element symbols: {available}, kind names: {kind_names}"
+        else:
+            available_str = str(available)
         raise ValueError(
             f"Target species '{target_species}' not found in structure. "
-            f"Available species: {sorted(symbols)}"
+            f"Available: {available_str}"
         )
 
 
@@ -281,25 +304,41 @@ def get_species_order_from_structure(structure) -> t.List[str]:
 
     This matches the order VASP uses for POTCAR and LDAU arrays.
 
+    For AiiDA StructureData with split species (e.g., 'Sn' and 'Sn1'),
+    uses kind_name instead of element symbol, so the LDAU arrays have
+    the correct length matching the POTCAR.
+
     Args:
         structure: AiiDA StructureData or any object with get_ase() method
 
     Returns:
-        List of unique element symbols in order of first appearance
+        List of unique species/kind names in order of first appearance
 
     Example:
         >>> species = get_species_order_from_structure(fe2o3_structure)
         >>> print(species)
         ['Fe', 'O']
+        >>> # For split species:
+        >>> species = get_species_order_from_structure(split_sno2)
+        >>> print(species)
+        ['Sn', 'Sn1', 'O']
     """
-    # Handle both AiiDA StructureData and plain structures
+    # AiiDA StructureData: use kind names (supports split species)
+    if hasattr(structure, 'sites'):
+        seen = {}
+        for site in structure.sites:
+            if site.kind_name not in seen:
+                seen[site.kind_name] = True
+        return list(seen.keys())
+
+    # Fallback: ASE chemical symbols
     if hasattr(structure, 'get_ase'):
         ase_struct = structure.get_ase()
     elif hasattr(structure, 'get_chemical_symbols'):
         ase_struct = structure
     else:
         raise TypeError(
-            f"structure must have get_ase() or get_chemical_symbols() method, "
+            f"structure must have get_ase(), sites, or get_chemical_symbols() method, "
             f"got {type(structure).__name__}"
         )
 
@@ -313,7 +352,131 @@ def get_species_order_from_structure(structure) -> t.List[str]:
     return list(seen.keys())
 
 
+def prepare_perturbed_structure(
+    structure,
+    target_species: str,
+) -> t.Tuple:
+    """Split first atom of target_species into a separate kind for single-atom perturbation.
+
+    The linear response method requires applying the perturbation potential to
+    a single atom. This function creates a new structure where:
+    - The first atom of target_species keeps the original kind name (perturbed)
+    - All other atoms of target_species get a new kind name with '1' suffix (unperturbed)
+    - Other species are unchanged
+
+    Atoms are sorted by kind so that the resulting POSCAR has contiguous species
+    blocks (required by VASP). The kind order is: perturbed, unperturbed, then
+    all other species in their original order.
+
+    The POTCAR must then include duplicate entries for both kinds (same pseudopotential).
+
+    Args:
+        structure: AiiDA StructureData
+        target_species: Element symbol to split (e.g., 'Sn')
+
+    Returns:
+        Tuple of (split_structure, perturbed_kind, unperturbed_kind) where:
+        - split_structure: New StructureData with split kinds
+        - perturbed_kind: Kind name for the perturbed atom (e.g., 'Sn')
+        - unperturbed_kind: Kind name for unperturbed atoms (e.g., 'Sn1')
+
+    Example:
+        >>> split, perturbed, unperturbed = prepare_perturbed_structure(supercell, 'Sn')
+        >>> # split has kinds: ['Sn', 'Sn1', 'O']
+        >>> # Sn = 1 atom (perturbed), Sn1 = 15 atoms, O = 32 atoms
+        >>> potential_mapping = {'Sn': 'Sn_d', 'Sn1': 'Sn_d', 'O': 'O'}
+    """
+    from aiida import orm
+
+    if not hasattr(structure, 'sites'):
+        raise TypeError(
+            f"structure must be an AiiDA StructureData, got {type(structure).__name__}"
+        )
+
+    # Find which sites belong to target species
+    target_indices = [
+        i for i, site in enumerate(structure.sites)
+        if site.kind_name == target_species
+    ]
+
+    if not target_indices:
+        raise ValueError(
+            f"Target species '{target_species}' not found in structure. "
+            f"Available kinds: {sorted({s.kind_name for s in structure.sites})}"
+        )
+
+    if len(target_indices) < 2:
+        raise ValueError(
+            f"Need at least 2 atoms of '{target_species}' to split. "
+            f"Found {len(target_indices)}. Use a supercell."
+        )
+
+    # Get the original kind to find the element symbol
+    original_kind = None
+    for kind in structure.kinds:
+        if kind.name == target_species:
+            original_kind = kind
+            break
+
+    perturbed_kind = target_species       # e.g., 'Sn'
+    unperturbed_kind = target_species + '1'  # e.g., 'Sn1'
+
+    # Classify each site into its new kind name and collect positions
+    # bins[kind_name] = list of positions
+    bins = {perturbed_kind: [], unperturbed_kind: []}
+    other_kind_order = []  # preserve original kind order for non-target species
+
+    first_target_found = False
+    for site in structure.sites:
+        if site.kind_name == target_species:
+            if not first_target_found:
+                first_target_found = True
+                bins[perturbed_kind].append(site.position)
+            else:
+                bins[unperturbed_kind].append(site.position)
+        else:
+            if site.kind_name not in bins:
+                bins[site.kind_name] = []
+                other_kind_order.append(site.kind_name)
+            bins[site.kind_name].append(site.position)
+
+    # Build new structure with atoms sorted by kind (contiguous blocks for VASP)
+    new_structure = orm.StructureData(cell=structure.cell)
+
+    # Define kind order: perturbed first, then unperturbed, then others
+    kind_order = [perturbed_kind, unperturbed_kind] + other_kind_order
+
+    # Add kinds and their sites in order
+    for kind_name in kind_order:
+        positions = bins.get(kind_name, [])
+        if not positions:
+            continue
+
+        # Add the kind definition
+        if kind_name == perturbed_kind:
+            new_structure.append_kind(original_kind)
+        elif kind_name == unperturbed_kind:
+            new_structure.append_kind(orm.Kind(
+                name=unperturbed_kind,
+                symbols=original_kind.symbols,
+                weights=original_kind.weights,
+            ))
+        else:
+            for kind in structure.kinds:
+                if kind.name == kind_name:
+                    new_structure.append_kind(kind)
+                    break
+
+        # Add all sites for this kind (contiguous block)
+        for pos in positions:
+            new_structure.append_site(
+                orm.Site(kind_name=kind_name, position=pos)
+            )
+
+    return new_structure, perturbed_kind, unperturbed_kind
+
+
 # Default potential values for linear regression
 # Note: V=0 is excluded because GS has LDAU=False while response has LDAU=True,
 # which can cause inconsistent baseline even at zero perturbation
-DEFAULT_POTENTIAL_VALUES = [-0.2, -0.1, 0.1, 0.2]
+DEFAULT_POTENTIAL_VALUES = [-0.20, -0.15, -0.10, -0.05, 0.05, 0.10, 0.15, 0.20]

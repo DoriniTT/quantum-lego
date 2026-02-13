@@ -1,9 +1,9 @@
 # Hubbard U Module - TODO
 
-⚠️ **STATUS: MODULE NOT YET FUNCTIONAL** ⚠️
+✅ **STATUS: FUNCTIONAL** (for non-magnetic systems like SnO2)
+⚠️ **NiO / AFM systems**: Issue #3 (AFM-II magnetic structure) still requires manual MAGMOM setup.
 
-This module requires essential fixes to match the VASP wiki reference implementation.
-**Current implementation produces incorrect U values due to fundamental methodological issues.**
+Critical fixes #1 (single-atom perturbation) and #2 (LDAUJ=LDAUU) have been resolved.
 
 ---
 
@@ -354,7 +354,40 @@ for v in +0.05 -0.05 +0.10 -0.10 +0.15 -0.15 +0.20 -0.20
 
 ---
 
-## Recent Bug Fixes (Completed 2026-02-03)
+## Recent Bug Fixes (Completed 2026-02-13)
+
+✅ These issues have been **RESOLVED** and do not require further action:
+
+6. **Single-Atom Perturbation / Species Splitting** (FIXED — Issue #1)
+   - Issue: Perturbation applied to ALL atoms of target species instead of ONE atom
+   - Fix: Added `prepare_perturbed_structure()` utility; `get_species_order_from_structure()`
+     and `validate_target_species()` now use AiiDA kind names; `extract_d_electron_occupation()`
+     matches by `site.kind_name` for split species
+   - Files: `u_calculation/utils.py`, `u_calculation/tasks.py`
+
+7. **LDAUJ Always 0 Instead of Matching LDAUU** (FIXED — Issue #2)
+   - Issue: For LDAUTYPE=3, LDAUJ must equal LDAUU; default was 0.0
+   - Fix: `build_ldau_arrays()` default `ldauj_value=None` → auto-matches LDAUU;
+     `hubbard_response` brick passes `ldauj=None`
+   - Files: `u_calculation/utils.py`, `bricks/hubbard_response.py`
+
+8. **Potential Sampling Defaults** (IMPROVED — Issue #4)
+   - Issue: Default 4 potentials; VASP wiki recommends 8
+   - Fix: Updated `DEFAULT_POTENTIAL_VALUES` and examples to use 8 values
+   - Note: Users can still override via `potential_values` parameter
+
+---
+
+## Remaining Issues
+
+### Issue #3: AFM-II Magnetic Structure (NiO-specific)
+
+This issue applies specifically to NiO and other antiferromagnetic systems.
+Non-magnetic systems like SnO2 are not affected. See details below.
+
+---
+
+## Previous Bug Fixes (Completed 2026-02-03)
 
 ✅ These issues have been **RESOLVED** and do not require further action:
 

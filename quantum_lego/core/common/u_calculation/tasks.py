@@ -129,17 +129,25 @@ def extract_d_electron_occupation(
     """
     species = target_species.value
 
-    # Get atom symbols from structure
-    ase_struct = structure.get_ase()
-    symbols = ase_struct.get_chemical_symbols()
-
-    # Find indices of target species (0-based)
-    target_indices = [i for i, s in enumerate(symbols) if s == species]
+    # Use kind_name from AiiDA StructureData for split-species support.
+    # For split structures (e.g., 'Sn' + 'Sn1'), kind_name correctly
+    # identifies only the perturbed atom, not all atoms of the element.
+    if hasattr(structure, 'sites'):
+        target_indices = [
+            i for i, site in enumerate(structure.sites)
+            if site.kind_name == species
+        ]
+        available = sorted({site.kind_name for site in structure.sites})
+    else:
+        ase_struct = structure.get_ase()
+        symbols = ase_struct.get_chemical_symbols()
+        target_indices = [i for i, s in enumerate(symbols) if s == species]
+        available = sorted(set(symbols))
 
     if not target_indices:
         raise ValueError(
             f"Target species '{species}' not found in structure. "
-            f"Available: {sorted(set(symbols))}"
+            f"Available: {available}"
         )
 
     # Read OUTCAR from retrieved folder

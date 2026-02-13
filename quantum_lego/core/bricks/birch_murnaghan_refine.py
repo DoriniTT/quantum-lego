@@ -1,26 +1,33 @@
-"""Birch-Murnaghan EOS analysis brick for the lego module.
+"""Birch-Murnaghan EOS refinement brick for the lego module.
 
-Pure computation brick (no VASP). Takes energy outputs from a previous
-batch stage and fits a Birch-Murnaghan equation of state to the
-volume-energy data using pymatgen's EOS class.
+Performs a zoomed-in BM scan around V0 from a previous BM fit.
+Generates volume-scaled structures, runs single-point VASP calculations,
+fits a refined EOS, and produces a recommended structure at refined V0.
+
+The number of VASP tasks is fixed at graph-build time (refine_n_points),
+but the actual volumes/structures are computed at runtime from the
+initial BM fit's V0.
 """
 
 from typing import Any, Dict, Set
 
 from aiida import orm
 from aiida.common.links import LinkType
+from aiida.plugins import WorkflowFactory
+from aiida_workgraph import task, WorkGraph
 
-from .connections import BIRCH_MURNAGHAN_PORTS as PORTS  # noqa: F401
-
-from quantum_lego.core.common.eos_tasks import (
+from .connections import BIRCH_MURNAGHAN_REFINE_PORTS as PORTS  # noqa: F401
+from ..common.utils import extract_total_energy
+from ..common.eos_tasks import (
     gather_eos_data,
     fit_birch_murnaghan_eos,
     build_recommended_structure,
+    build_refined_structures,
 )
 
 
 def validate_stage(stage: Dict[str, Any], stage_names: Set[str]) -> None:
-    """Validate a birch_murnaghan stage configuration.
+    """Validate a birch_murnaghan_refine stage configuration.
 
     Args:
         stage: Stage configuration dict.
@@ -31,57 +38,60 @@ def validate_stage(stage: Dict[str, Any], stage_names: Set[str]) -> None:
     """
     name = stage['name']
 
-    if 'batch_from' not in stage:
+    if 'eos_from' not in stage:
         raise ValueError(
-            f"Stage '{name}': birch_murnaghan stages require 'batch_from' "
-            f"(name of a previous batch stage)"
+            f"Stage '{name}': birch_murnaghan_refine stages require 'eos_from' "
+            f"(name of a previous birch_murnaghan stage)"
         )
-
-    batch_from = stage['batch_from']
-    if batch_from not in stage_names:
+    eos_from = stage['eos_from']
+    if eos_from not in stage_names:
         raise ValueError(
-            f"Stage '{name}' batch_from='{batch_from}' must reference "
+            f"Stage '{name}' eos_from='{eos_from}' must reference "
             f"a previous stage name"
         )
-    if batch_from == name:
+
+    if 'structure_from' not in stage:
         raise ValueError(
-            f"Stage '{name}': batch_from cannot reference itself"
+            f"Stage '{name}': birch_murnaghan_refine stages require "
+            f"'structure_from'"
+        )
+    structure_from = stage['structure_from']
+    if structure_from != 'input' and structure_from not in stage_names:
+        raise ValueError(
+            f"Stage '{name}' structure_from='{structure_from}' must reference "
+            f"a previous stage name or 'input'"
         )
 
-    volumes = stage.get('volumes')
-    if not isinstance(volumes, dict):
+    if 'base_incar' not in stage:
         raise ValueError(
-            f"Stage '{name}': birch_murnaghan stages require 'volumes' dict "
-            f"mapping calc_label to volume in Angstrom^3"
+            f"Stage '{name}': birch_murnaghan_refine stages require "
+            f"'base_incar'"
         )
-    if len(volumes) < 4:
+
+    n_points = stage.get('refine_n_points', 7)
+    if not isinstance(n_points, int) or n_points < 4:
         raise ValueError(
-            f"Stage '{name}': volumes must have at least 4 entries "
-            f"(got {len(volumes)})"
+            f"Stage '{name}': refine_n_points must be an integer >= 4 "
+            f"(got {n_points})"
         )
-    for label, vol in volumes.items():
-        if not isinstance(label, str):
-            raise ValueError(
-                f"Stage '{name}': volumes keys must be strings "
-                f"(got {type(label)})"
-            )
-        if not isinstance(vol, (int, float)):
-            raise ValueError(
-                f"Stage '{name}': volumes['{label}'] must be numeric"
-            )
-        if float(vol) <= 0.0:
-            raise ValueError(
-                f"Stage '{name}': volumes['{label}'] must be positive "
-                f"(got {vol})"
-            )
+
+    strain_range = stage.get('refine_strain_range', 0.02)
+    if not isinstance(strain_range, (int, float)) or strain_range <= 0:
+        raise ValueError(
+            f"Stage '{name}': refine_strain_range must be positive "
+            f"(got {strain_range})"
+        )
 
 
 def create_stage_tasks(wg, stage, stage_name, context):
-    """Create birch_murnaghan stage tasks in the WorkGraph.
+    """Create birch_murnaghan_refine stage tasks in the WorkGraph.
 
-    This creates:
-    1. gather_eos_data: collects volume-energy pairs from batch
-    2. fit_birch_murnaghan_eos: fits the EOS
+    Creates:
+    1. build_refined_structures: generates N structures around V0
+    2. N VASP tasks + energy extraction tasks
+    3. gather_eos_data: collects volume-energy pairs
+    4. fit_birch_murnaghan_eos: fits refined EOS
+    5. build_recommended_structure: scales to refined V0
 
     Args:
         wg: WorkGraph to add tasks to.
@@ -92,74 +102,125 @@ def create_stage_tasks(wg, stage, stage_name, context):
     Returns:
         Dict with task references for later stages.
     """
+    from . import resolve_structure_from
+    from ..workgraph import _prepare_builder_inputs
+
     stage_tasks = context['stage_tasks']
     stage_types = context['stage_types']
+    code = context['code']
+    potential_family = context['potential_family']
+    potential_mapping = context['potential_mapping']
+    options = context['options']
+    base_kpoints_spacing = context['base_kpoints_spacing']
+    clean_workdir = context['clean_workdir']
 
-    batch_from = stage['batch_from']
-    ref_stage_type = stage_types.get(batch_from, 'vasp')
-    if ref_stage_type != 'batch':
+    # Get EOS result from previous BM stage
+    eos_from = stage['eos_from']
+    ref_stage_type = stage_types.get(eos_from)
+    if ref_stage_type != 'birch_murnaghan':
         raise ValueError(
-            f"Birch-Murnaghan stage '{stage_name}' batch_from='{batch_from}' "
-            f"must reference a batch stage (got type='{ref_stage_type}')"
+            f"Refine stage '{stage_name}' eos_from='{eos_from}' "
+            f"must reference a birch_murnaghan stage "
+            f"(got type='{ref_stage_type}')"
+        )
+    eos_result_socket = stage_tasks[eos_from]['fit'].outputs.result
+
+    # Resolve input structure
+    structure_from = stage['structure_from']
+    if structure_from == 'input':
+        input_structure = context['input_structure']
+    else:
+        input_structure = resolve_structure_from(structure_from, context)
+
+    n_points = stage.get('refine_n_points', 7)
+    strain_range = stage.get('refine_strain_range', 0.02)
+
+    # Create build_refined_structures task
+    build_task = wg.add_task(
+        build_refined_structures,
+        name=f'build_refined_{stage_name}',
+        structure=input_structure,
+        eos_result=eos_result_socket,
+        strain_range=orm.Float(strain_range),
+        n_points=orm.Int(n_points),
+    )
+
+    # VASP setup
+    VaspWorkChain = WorkflowFactory('vasp.v2.vasp')
+    VaspTask = task(VaspWorkChain)
+
+    base_incar = stage['base_incar']
+    stage_kpoints_spacing = stage.get('kpoints_spacing', base_kpoints_spacing)
+    stage_kpoints_mesh = stage.get('kpoints', None)
+    stage_retrieve = stage.get('retrieve', None)
+
+    builder_inputs = _prepare_builder_inputs(
+        incar=base_incar,
+        kpoints_spacing=stage_kpoints_spacing,
+        potential_family=potential_family,
+        potential_mapping=potential_mapping,
+        options=options,
+        retrieve=stage_retrieve,
+        restart_folder=None,
+        clean_workdir=clean_workdir,
+        kpoints_mesh=stage_kpoints_mesh,
+    )
+
+    # Create VASP + energy tasks for each refine point
+    energy_tasks = {}
+    calc_tasks = {}
+    for i in range(n_points):
+        label = f'refine_{i:02d}'
+
+        vasp_task = wg.add_task(
+            VaspTask,
+            name=f'vasp_{stage_name}_{label}',
+            structure=build_task.outputs[label],
+            code=code,
+            **builder_inputs,
         )
 
-    batch_result = stage_tasks[batch_from]
-    energy_tasks = batch_result.get('energy_tasks')
-    if not energy_tasks:
-        raise ValueError(
-            f"Birch-Murnaghan stage '{stage_name}': stage '{batch_from}' "
-            f"does not have batch energy_tasks"
+        energy_task = wg.add_task(
+            extract_total_energy,
+            name=f'energy_{stage_name}_{label}',
+            energies=vasp_task.outputs.misc,
+            retrieved=vasp_task.outputs.retrieved,
         )
 
-    volumes = stage['volumes']
-
-    # Validate labels match batch calculations
-    missing_labels = [label for label in volumes if label not in energy_tasks]
-    if missing_labels:
-        raise ValueError(
-            f"Birch-Murnaghan stage '{stage_name}': labels {missing_labels} "
-            f"not found in batch stage '{batch_from}' calculations"
-        )
-
-    # Sort by label for deterministic ordering
-    sorted_labels = sorted(volumes.keys())
-    sorted_volumes = [float(volumes[label]) for label in sorted_labels]
-
-    # Build energy kwargs for gather task
-    energy_kwargs = {}
-    for label in sorted_labels:
-        energy_kwargs[label] = energy_tasks[label].outputs.result
+        calc_tasks[label] = vasp_task
+        energy_tasks[label] = energy_task
 
     # Create gather task
+    energy_kwargs = {
+        label: et.outputs.result for label, et in energy_tasks.items()
+    }
     gather_task = wg.add_task(
         gather_eos_data,
-        name=f'gather_eos_{stage_name}',
-        volumes=orm.List(list=sorted_volumes),
-        labels=orm.List(list=sorted_labels),
+        name=f'gather_refined_{stage_name}',
+        volumes=build_task.outputs['volumes'],
+        labels=build_task.outputs['labels'],
         **energy_kwargs,
     )
 
     # Create fit task
     fit_task = wg.add_task(
         fit_birch_murnaghan_eos,
-        name=f'fit_bm_{stage_name}',
+        name=f'fit_refined_{stage_name}',
         eos_data=gather_task.outputs.result,
     )
 
-    # Create recommended structure task
-    # Use the structure stored by the batch stage
-    input_structure = batch_result.get('structure')
-    if input_structure is None:
-        input_structure = context['input_structure']
-
+    # Create recommend task
     recommend_task = wg.add_task(
         build_recommended_structure,
-        name=f'recommend_{stage_name}',
+        name=f'recommend_refined_{stage_name}',
         structure=input_structure,
         eos_result=fit_task.outputs.result,
     )
 
     return {
+        'build': build_task,
+        'calc_tasks': calc_tasks,
+        'energy_tasks': energy_tasks,
         'gather': gather_task,
         'fit': fit_task,
         'recommend': recommend_task,
@@ -167,15 +228,13 @@ def create_stage_tasks(wg, stage, stage_name, context):
 
 
 def expose_stage_outputs(wg, stage_name, stage_tasks_result, namespace_map=None):
-    """Expose birch_murnaghan stage outputs on the WorkGraph.
+    """Expose birch_murnaghan_refine stage outputs on the WorkGraph.
 
     Args:
         wg: WorkGraph instance.
         stage_name: Unique stage identifier.
         stage_tasks_result: Dict returned by create_stage_tasks.
-        namespace_map: Dict mapping output group to namespace string,
-                      e.g. {'main': 'stage1'}. If None, falls back to
-                      flat naming with stage_name prefix.
+        namespace_map: Dict mapping output group to namespace string.
     """
     fit_task = stage_tasks_result['fit']
     recommend_task = stage_tasks_result['recommend']
@@ -184,12 +243,12 @@ def expose_stage_outputs(wg, stage_name, stage_tasks_result, namespace_map=None)
         ns = namespace_map['main']
         setattr(
             wg.outputs,
-            f'{ns}.birch_murnaghan.eos_result',
+            f'{ns}.birch_murnaghan_refine.eos_result',
             fit_task.outputs.result,
         )
         setattr(
             wg.outputs,
-            f'{ns}.birch_murnaghan.recommended_structure',
+            f'{ns}.birch_murnaghan_refine.recommended_structure',
             recommend_task.outputs.result,
         )
     else:
@@ -207,18 +266,16 @@ def expose_stage_outputs(wg, stage_name, stage_tasks_result, namespace_map=None)
 
 def get_stage_results(wg_node, wg_pk: int, stage_name: str,
                       namespace_map: dict = None) -> dict:
-    """Extract results from a birch_murnaghan stage.
+    """Extract results from a birch_murnaghan_refine stage.
 
     Args:
         wg_node: The WorkGraph ProcessNode.
         wg_pk: WorkGraph PK.
         stage_name: Name of the stage.
-        namespace_map: Dict mapping output group to namespace string,
-                      e.g. {'main': 'stage1'}. If None, uses flat naming.
+        namespace_map: Dict mapping output group to namespace string.
 
     Returns:
-        Dict with keys: eos_result, v0, e0, b0_GPa, b1, n_points,
-        rms_residual_eV, pk, stage, type.
+        Dict with EOS fit results and recommended structure info.
     """
     result = {
         'eos_result': None,
@@ -233,7 +290,7 @@ def get_stage_results(wg_node, wg_pk: int, stage_name: str,
         'recommended_structure_pk': None,
         'pk': wg_pk,
         'stage': stage_name,
-        'type': 'birch_murnaghan',
+        'type': 'birch_murnaghan_refine',
     }
 
     eos_node = None
@@ -245,7 +302,10 @@ def get_stage_results(wg_node, wg_pk: int, stage_name: str,
         if namespace_map is not None:
             ns = namespace_map['main']
             stage_ns = getattr(outputs, ns, None)
-            brick_ns = getattr(stage_ns, 'birch_murnaghan', None) if stage_ns is not None else None
+            brick_ns = (
+                getattr(stage_ns, 'birch_murnaghan_refine', None)
+                if stage_ns is not None else None
+            )
             if brick_ns is not None:
                 if hasattr(brick_ns, 'eos_result'):
                     eos_node = brick_ns.eos_result
@@ -278,19 +338,19 @@ def get_stage_results(wg_node, wg_pk: int, stage_name: str,
 
     # Fallback: traverse links
     if result['eos_result'] is None:
-        _extract_bm_stage_from_workgraph(wg_node, stage_name, result)
+        _extract_refine_stage_from_workgraph(wg_node, stage_name, result)
 
     return result
 
 
-def _extract_bm_stage_from_workgraph(
+def _extract_refine_stage_from_workgraph(
     wg_node, stage_name: str, result: dict
 ) -> None:
-    """Extract birch_murnaghan stage results by traversing WorkGraph links."""
+    """Extract refine stage results by traversing WorkGraph links."""
     if not hasattr(wg_node, 'base'):
         return
 
-    task_name = f'fit_bm_{stage_name}'
+    task_name = f'fit_refined_{stage_name}'
 
     called_calc = wg_node.base.links.get_outgoing(link_type=LinkType.CALL_CALC)
     for link in called_calc.all():
@@ -310,13 +370,19 @@ def _extract_bm_stage_from_workgraph(
                     result['b1'] = eos_dict.get('b1')
                     result['n_points'] = eos_dict.get('n_points')
                     result['rms_residual_eV'] = eos_dict.get('rms_residual_eV')
+                    result['recommended_label'] = eos_dict.get(
+                        'recommended_label'
+                    )
+                    result['recommended_volume_error_pct'] = eos_dict.get(
+                        'recommended_volume_error_pct'
+                    )
                     return
 
 
 def print_stage_results(
     index: int, stage_name: str, stage_result: dict
 ) -> None:
-    """Print formatted results for a birch_murnaghan stage.
+    """Print formatted results for a birch_murnaghan_refine stage.
 
     Args:
         index: 1-based stage index.
@@ -325,19 +391,19 @@ def print_stage_results(
     """
     from ..console import console, print_stage_header
 
-    print_stage_header(index, stage_name, brick_type="birch_murnaghan")
+    print_stage_header(index, stage_name, brick_type="birch_murnaghan_refine")
 
     if stage_result['v0'] is not None:
-        console.print(f"      [bold]V0:[/bold] [energy]{stage_result['v0']:.4f}[/energy] A^3")
+        console.print(f"      [bold]V0 (refined):[/bold] [energy]{stage_result['v0']:.4f}[/energy] A^3")
 
     if stage_result['e0'] is not None:
-        console.print(f"      [bold]E0:[/bold] [energy]{stage_result['e0']:.6f}[/energy] eV")
+        console.print(f"      [bold]E0 (refined):[/bold] [energy]{stage_result['e0']:.6f}[/energy] eV")
 
     if stage_result['b0_GPa'] is not None:
-        console.print(f"      [bold]B0:[/bold] [energy]{stage_result['b0_GPa']:.2f}[/energy] GPa")
+        console.print(f"      [bold]B0 (refined):[/bold] [energy]{stage_result['b0_GPa']:.2f}[/energy] GPa")
 
     if stage_result['b1'] is not None:
-        console.print(f"      [bold]B0':[/bold] [energy]{stage_result['b1']:.2f}[/energy]")
+        console.print(f"      [bold]B0' (refined):[/bold] [energy]{stage_result['b1']:.2f}[/energy]")
 
     if stage_result['n_points'] is not None:
         console.print(f"      [bold]Data points:[/bold] {stage_result['n_points']}")
@@ -360,6 +426,6 @@ def print_stage_results(
         volumes = eos.get('volumes', [])
         energies = eos.get('energies', [])
         if volumes and energies:
-            console.print("      [bold]V/E data:[/bold]")
+            console.print("      [bold]V/E data (refined):[/bold]")
             for v, e in zip(volumes, energies):
                 console.print(f"        V = {v:.4f} A^3  E = [energy]{e:.6f}[/energy] eV")

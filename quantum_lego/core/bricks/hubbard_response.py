@@ -167,7 +167,7 @@ def create_stage_tasks(wg, stage, stage_name, context):
     target_species = stage['target_species']
     potential_values = stage.get('potential_values', DEFAULT_POTENTIAL_VALUES)
     ldaul = stage.get('ldaul', 2)
-    ldauj = stage.get('ldauj', 0.0)
+    ldauj = stage.get('ldauj', None)  # None = same as LDAUU (correct for LDAUTYPE=3)
     stage_kpoints_spacing = stage.get('kpoints_spacing', base_kpoints_spacing)
     base_incar = stage.get('incar', {})
 
