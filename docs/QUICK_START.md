@@ -4,7 +4,7 @@
 
 ## What is Quantum Lego?
 
-Quantum Lego lets you build computational chemistry workflows like Lego blocks. Each "brick" is a calculation type (VASP, DOS, batch, etc.) that can connect to other bricks to create complex multi-stage workflows.
+Quantum Lego lets you build computational chemistry workflows like Lego blocks. Each "brick" is a calculation type (VASP, DOS, batch, etc.) that can connect to other bricks to create complex multi-stage workflows. For VASP workflows, `quick_vasp_sequential()` is the central execution path; helper functions like `quick_vasp`, `quick_vasp_batch`, and `quick_dos` are convenience wrappers that build stages and delegate.
 
 ## Installation
 
@@ -107,9 +107,9 @@ pk = quick_vasp(
 ### DOS Calculation
 
 ```python
-from quantum_lego import quick_dos, get_dos_results
+from quantum_lego import quick_dos, get_stage_results
 
-pk = quick_dos(
+result = quick_dos(
     structure=structure,
     code_label='VASP-6.5.1@localwork',
     scf_incar={
@@ -131,11 +131,11 @@ pk = quick_dos(
     name='dos',
 )
 
-results = get_dos_results(pk)
-print(f"Energy: {results['energy']:.4f} eV")
+dos_stage = get_stage_results(result, 'dos')
+print(f"Energy: {dos_stage['energy']:.4f} eV")
 ```
 
-Note: DOS brick uses lowercase INCAR keys (requirement from AiiDA-VASP).
+Note: DOS brick uses lowercase INCAR keys (requirement from AiiDA-VASP). `quick_dos` is a thin wrapper over `quick_vasp_sequential()` with one `type='dos'` stage.
 
 ### Batch Calculations
 
@@ -216,7 +216,10 @@ For DOS stages, provide exactly one structure source:
 - `structure_from='some_stage'`, or
 - `structure=<StructureData|PK>`
 
-Runnable example: `examples/vasp/run_mixed_dos_sources.py`
+Runnable example: `examples/04_sequential/mixed_dos_sources.py`
+
+If your workflow contains only DOS stages, you can use `quick_dos_sequential(...)`
+as a DOS-focused wrapper that still delegates to the same stage/brick engine.
 
 ## Understanding the Brick System
 

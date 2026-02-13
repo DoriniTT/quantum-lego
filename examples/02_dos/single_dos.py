@@ -41,7 +41,7 @@ if __name__ == '__main__':
     setup_profile()
     structure = load_sno2()
 
-    pk = quick_dos(
+    result = quick_dos(
         structure=structure,
         code_label=DEFAULT_VASP_CODE,
         scf_incar=SCF_INCAR,
@@ -55,6 +55,7 @@ if __name__ == '__main__':
         name='example_single_dos',
     )
 
+    pk = result['__workgraph_pk__']
     print(f'Submitted DOS PK: {pk}')
     print(f'Monitor with: verdi process show {pk}')
     print('Get summary with: from quantum_lego import print_dos_results; print_dos_results(PK)')

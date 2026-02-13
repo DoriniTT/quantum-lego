@@ -31,17 +31,32 @@ def validate_stage(stage: Dict[str, Any], stage_names: Set[str]) -> None:
     if 'incar' not in stage:
         raise ValueError(f"Stage '{name}' missing required 'incar' field")
 
-    # Require restart (must be None or a previous stage name)
-    if 'restart' not in stage:
-        raise ValueError(f"Stage '{name}' missing required 'restart' field (use None or a stage name)")
+    # Require restart or restart_from (mutually exclusive)
+    restart = stage.get('restart')
+    restart_from = stage.get('restart_from')
 
-    restart = stage['restart']
+    if restart is not None and restart_from is not None:
+        raise ValueError(
+            f"Stage '{name}': cannot use both 'restart' and 'restart_from'"
+        )
+
+    if 'restart' not in stage and 'restart_from' not in stage:
+        raise ValueError(
+            f"Stage '{name}' missing 'restart' or 'restart_from' field "
+            f"(use restart=None, restart='stage_name', or restart_from=PK)"
+        )
+
     if restart is not None:
         if restart not in stage_names:
             raise ValueError(
                 f"Stage '{name}' restart='{restart}' references unknown or "
                 f"later stage (must be defined before this stage)"
             )
+
+    if restart_from is not None and not isinstance(restart_from, int):
+        raise ValueError(
+            f"Stage '{name}': restart_from must be an int PK, got {type(restart_from).__name__}"
+        )
 
     # Validate structure_from for VASP stages (skip if explicit structure provided)
     if 'structure' not in stage:
@@ -164,11 +179,27 @@ def create_stage_tasks(
         )
         stage_structure = supercell_task.outputs.result
 
-    # Determine restart source (None or stage name)
-    restart = stage['restart']
+    # Determine restart source: internal stage name or external PK
+    restart = stage.get('restart')
+    restart_from = stage.get('restart_from')
     restart_folder = None
+
     if restart is not None:
         restart_folder = stage_tasks[restart]['vasp'].outputs.remote_folder
+    elif restart_from is not None:
+        from ..utils import prepare_restart_settings
+        copy_wavecar = stage.get('copy_wavecar', True)
+        copy_chgcar = stage.get('copy_chgcar', False)
+        restart_structure, restart_settings = prepare_restart_settings(
+            restart_from, copy_wavecar=copy_wavecar, copy_chgcar=copy_chgcar
+        )
+        restart_folder = restart_settings['folder']
+        if restart_settings['incar_additions']:
+            from ..common.utils import deep_merge_dicts
+            stage['incar'] = deep_merge_dicts(stage['incar'], restart_settings['incar_additions'])
+        # Use restart structure if no explicit structure source
+        if i == 0 and 'structure' not in stage and stage.get('structure_from') is None:
+            stage_structure = restart_structure
 
     # Prepare builder inputs for this stage
     stage_incar = stage['incar']

@@ -1,8 +1,8 @@
 """DOS workflow builders for the lego module.
 
-This module provides Density of States (DOS) calculation functions using
-VASP's BandsWorkChain. It supports single DOS calculations and batch
-DOS calculations across multiple structures.
+This module provides DOS helper functions. Single DOS flows are routed
+through ``quick_vasp_sequential`` and the DOS brick system, while
+``quick_dos_batch`` keeps a dedicated parallel implementation.
 """
 
 import typing as t
@@ -12,11 +12,72 @@ from aiida.plugins import WorkflowFactory
 from aiida_workgraph import WorkGraph, task
 
 from .common.utils import deep_merge_dicts
-from .retrieve_defaults import build_vasp_retrieve
 from .workflow_utils import (
     _prepare_builder_inputs,
     _wait_for_completion,
 )
+
+
+def quick_dos_sequential(
+    structure: t.Union[orm.StructureData, int] = None,
+    stages: t.List[dict] = None,
+    code_label: str = None,
+    kpoints_spacing: float = 0.03,
+    potential_family: str = 'PBE',
+    potential_mapping: dict = None,
+    options: dict = None,
+    max_concurrent_jobs: int = None,
+    name: str = 'quick_dos_sequential',
+    wait: bool = False,
+    poll_interval: float = 10.0,
+    clean_workdir: bool = False,
+) -> dict:
+    """Submit one or more DOS stages through quick_vasp_sequential.
+
+    This is a thin DOS-focused wrapper around ``quick_vasp_sequential``.
+    Every stage is validated as DOS and delegated to the DOS brick.
+
+    Returns:
+        Dict with the same shape as ``quick_vasp_sequential``.
+    """
+    if structure is None:
+        raise ValueError("structure is required")
+    if stages is None:
+        raise ValueError("stages is required - provide list of DOS stage configurations")
+    if code_label is None:
+        raise ValueError("code_label is required")
+    if options is None:
+        raise ValueError("options is required - specify scheduler resources")
+
+    normalized_stages = []
+    for index, stage in enumerate(stages):
+        normalized_stage = dict(stage)
+        stage_name = normalized_stage.get('name', f'stage_{index + 1}')
+        stage_type = normalized_stage.get('type', 'dos')
+        if stage_type != 'dos':
+            raise ValueError(
+                f"Stage '{stage_name}' has type='{stage_type}'. "
+                f"quick_dos_sequential only accepts DOS stages."
+            )
+        normalized_stage['type'] = 'dos'
+        normalized_stages.append(normalized_stage)
+
+    from .vasp_workflows import quick_vasp_sequential
+
+    return quick_vasp_sequential(
+        structure=structure,
+        stages=normalized_stages,
+        code_label=code_label,
+        kpoints_spacing=kpoints_spacing,
+        potential_family=potential_family,
+        potential_mapping=potential_mapping,
+        options=options,
+        max_concurrent_jobs=max_concurrent_jobs,
+        name=name,
+        wait=wait,
+        poll_interval=poll_interval,
+        clean_workdir=clean_workdir,
+    )
 
 
 def quick_dos(
@@ -38,18 +99,18 @@ def quick_dos(
     clean_workdir: bool = False,
 ) -> dict:
     """
-    Submit a DOS calculation using BandsWorkChain with only_dos=True.
+    Submit a single DOS calculation through the stage/brick system.
 
-    This function uses AiiDA-VASP's BandsWorkChain which handles the
-    SCF -> DOS workflow internally with proper CHGCAR/WAVECAR passing.
+    Thin wrapper around ``quick_dos_sequential`` that builds one DOS stage
+    and preserves the public return contract ``{'__workgraph_pk__': pk}``.
 
     Args:
         structure: StructureData or PK of structure to calculate DOS for.
         code_label: VASP code label (e.g., 'VASP-6.5.1@localwork')
         scf_incar: INCAR parameters for SCF stage (e.g., {'encut': 400, 'ediff': 1e-5}).
-                   lwave and lcharg are forced to True internally by BandsWorkChain.
+                   lwave and lcharg are forced to True.
         dos_incar: INCAR parameters for DOS stage (e.g., {'nedos': 2000, 'lorbit': 11}).
-                   Passed to the 'dos' namespace of BandsWorkChain.
+                   Passed to the DOS brick.
         kpoints_spacing: K-points spacing in A^-1 for SCF (default: 0.03)
         kpoints: Explicit k-points mesh for SCF [nx, ny, nz] (overrides kpoints_spacing)
         dos_kpoints_spacing: K-points spacing for DOS (default: 80% of kpoints_spacing)
@@ -64,7 +125,7 @@ def quick_dos(
         clean_workdir: Whether to clean the work directory after completion
 
     Returns:
-        Dict with '__workgraph_pk__' key containing the BandsWorkChain PK
+        Dict with '__workgraph_pk__' key containing the WorkGraph PK.
 
     Example (using spacing):
         >>> result = quick_dos(
@@ -99,9 +160,6 @@ def quick_dos(
     Note:
         AiiDA-VASP requires lowercase INCAR keys (e.g., 'encut' not 'ENCUT').
     """
-    from aiida.engine import submit
-
-    # Validate required inputs
     if structure is None:
         raise ValueError("structure is required")
     if code_label is None:
@@ -113,125 +171,49 @@ def quick_dos(
     if options is None:
         raise ValueError("options is required - specify scheduler resources")
 
-    # Load structure if PK
-    if isinstance(structure, int):
-        structure = orm.load_node(structure)
-
-    # Default DOS k-points spacing to 80% of SCF spacing (denser)
-    # Only used if explicit dos_kpoints mesh is not provided
-    if dos_kpoints_spacing is None and dos_kpoints is None:
-        dos_kpoints_spacing = kpoints_spacing * 0.8
-
-    # Load code and BandsWorkChain
-    code = orm.load_code(code_label)
-    BandsWorkChain = WorkflowFactory('vasp.v2.bands')
-
-    # Prepare INCAR parameters
-    # Force lwave and lcharg for non-SCF DOS calculation
+    # Keep compatibility with previous quick_dos behavior
     scf_incar_final = dict(scf_incar)
     scf_incar_final['lwave'] = True
     scf_incar_final['lcharg'] = True
-    # Ensure static calculation
-    if 'nsw' not in scf_incar_final:
-        scf_incar_final['nsw'] = 0
-    if 'ibrion' not in scf_incar_final:
-        scf_incar_final['ibrion'] = -1
 
-    # DOS INCAR
-    dos_incar_final = dict(dos_incar)
-    if 'nsw' not in dos_incar_final:
-        dos_incar_final['nsw'] = 0
-    if 'ibrion' not in dos_incar_final:
-        dos_incar_final['ibrion'] = -1
-
-    # Band settings - only_dos mode
-    # dos_kpoints_distance is required but will be ignored if explicit kpoints is set
-    band_settings = {
-        'only_dos': True,
-        'run_dos': True,
-        'dos_kpoints_distance': float(dos_kpoints_spacing) if dos_kpoints_spacing else 0.03,
+    stage = {
+        'name': 'dos',
+        'type': 'dos',
+        'structure': structure,
+        'scf_incar': scf_incar_final,
+        'dos_incar': dict(dos_incar),
     }
 
-    # Build overrides for protocol-based builder
-    # Note: settings must be {} not None to avoid aiida-vasp bug
-    scf_overrides = {
-        'parameters': {'incar': scf_incar_final},
-        'potential_family': potential_family,
-        'potential_mapping': potential_mapping or {},
-        'clean_workdir': False,  # Keep for DOS restart
-        'settings': {
-            'ADDITIONAL_RETRIEVE_LIST': build_vasp_retrieve(None),
-        },
-    }
-
-    # SCF k-points: explicit mesh or spacing
     if kpoints is not None:
-        scf_kpoints_data = orm.KpointsData()
-        scf_kpoints_data.set_kpoints_mesh(kpoints)
-        scf_overrides['kpoints'] = scf_kpoints_data
-    else:
-        scf_overrides['kpoints_spacing'] = float(kpoints_spacing)
+        stage['kpoints'] = kpoints
+    elif kpoints_spacing != 0.03:
+        stage['kpoints_spacing'] = kpoints_spacing
 
-    # DOS overrides
-    dos_retrieve = retrieve if retrieve is not None else ['DOSCAR']
-    dos_overrides = {
-        'parameters': {'incar': dos_incar_final},
-        'settings': {
-            'ADDITIONAL_RETRIEVE_LIST': build_vasp_retrieve(dos_retrieve),
-            'parser_settings': {
-                'include_node': ['dos'],
-            },
-        },
-    }
-
-    # DOS k-points: explicit mesh or spacing
     if dos_kpoints is not None:
-        dos_kpoints_data = orm.KpointsData()
-        dos_kpoints_data.set_kpoints_mesh(dos_kpoints)
-        dos_overrides['kpoints'] = dos_kpoints_data
+        stage['dos_kpoints'] = dos_kpoints
+    elif dos_kpoints_spacing is not None:
+        stage['dos_kpoints_spacing'] = dos_kpoints_spacing
 
-    overrides = {
-        'scf': scf_overrides,
-        'dos': dos_overrides,
-        'band_settings': band_settings,
-    }
+    if retrieve is not None:
+        stage['retrieve'] = retrieve
 
-    # Add settings for file retrieval
-    # Note: aiida-vasp expects UPPERCASE keys for settings
-
-    # Clean workdir option
-    if clean_workdir:
-        overrides['clean_children_workdir'] = 'all'
-
-    # Use protocol-based builder with run_relax=False to exclude relax namespace
-    # Note: band_settings must be in overrides, not as separate parameter
-    # (to avoid recursive_merge error with None)
-    builder = BandsWorkChain.get_builder_from_protocol(
-        code=code,
+    result = quick_dos_sequential(
         structure=structure,
-        run_relax=False,  # Critical: skip relaxation
-        overrides=overrides,
+        stages=[stage],
+        code_label=code_label,
+        kpoints_spacing=kpoints_spacing,
+        potential_family=potential_family,
+        potential_mapping=potential_mapping,
         options=options,
+        max_concurrent_jobs=None,
+        name=name,
+        wait=wait,
+        poll_interval=poll_interval,
+        clean_workdir=clean_workdir,
     )
 
-    # Set metadata label
-    builder.metadata.label = name
-
-    # Note: The `retrieve` parameter is passed through protocol overrides.
-    # If DOSCAR doesn't appear in retrieved files, use export_files() to
-    # manually download it from the remote folder after calculation completes.
-
-    # Submit the builder directly (not unpacked)
-    node = submit(builder)
-    pk = node.pk
-
-    # Wait if requested
-    if wait:
-        _wait_for_completion(pk, poll_interval)
-
-    # Return dict for consistency with other quick_* functions
     return {
-        '__workgraph_pk__': pk,
+        '__workgraph_pk__': result['__workgraph_pk__'],
     }
 
 

@@ -3,19 +3,19 @@
 This module provides VASP-specific workflow functions for single, batch,
 and sequential calculations. It handles VASP WorkChain setup, restart
 chaining, supercell transformations, and multi-stage pipelines.
+
+quick_vasp and quick_vasp_batch are thin wrappers around quick_vasp_sequential,
+which is the central entry point. For more specialized workflows, see
+specialized_workflows.py (quick_hubbard_u, quick_aimd).
 """
 
 import typing as t
 
 from aiida import orm
-from aiida.plugins import WorkflowFactory
-from aiida_workgraph import WorkGraph, task
 
-from .common.utils import extract_total_energy
-from .utils import prepare_restart_settings
-from .common.utils import deep_merge_dicts
+from aiida_workgraph import WorkGraph
+
 from .workflow_utils import (
-    _prepare_builder_inputs,
     _wait_for_completion,
     _validate_stages,
     _build_indexed_output_name,
@@ -43,8 +43,9 @@ def quick_vasp(
     """
     Submit a single VASP calculation with minimal boilerplate.
 
-    This is the primary entry point for exploratory VASP calculations.
-    Specify INCAR parameters directly - no presets, maximum flexibility.
+    Thin wrapper around quick_vasp_sequential that builds a single-stage
+    config and delegates. Specify INCAR parameters directly - no presets,
+    maximum flexibility.
 
     Args:
         structure: StructureData or PK. If restart_from is provided, this is optional.
@@ -88,23 +89,8 @@ def quick_vasp(
         ...     name='sno2_dos',
         ... )
     """
-    # Handle restart
-    restart_folder = None
-    incar_additions = {}
-
-    if restart_from is not None:
-        restart_structure, restart_settings = prepare_restart_settings(
-            restart_from,
-            copy_wavecar=copy_wavecar,
-            copy_chgcar=copy_chgcar,
-        )
-        if structure is None:
-            structure = restart_structure
-        restart_folder = restart_settings['folder']
-        incar_additions = restart_settings['incar_additions']
-
     # Validate required inputs
-    if structure is None:
+    if structure is None and restart_from is None:
         raise ValueError("structure is required (or provide restart_from)")
     if code_label is None:
         raise ValueError("code_label is required")
@@ -113,67 +99,47 @@ def quick_vasp(
     if options is None:
         raise ValueError("options is required - specify scheduler resources")
 
-    # Load structure if PK
-    if isinstance(structure, int):
-        structure = orm.load_node(structure)
+    # Build single stage config
+    stage = {
+        'name': 'calc',
+        'incar': incar,
+    }
 
-    # Merge restart INCAR additions
-    if incar_additions:
-        incar = deep_merge_dicts(incar, incar_additions)
+    # Restart: external PK or none
+    if restart_from is not None:
+        stage['restart_from'] = restart_from
+        stage['copy_wavecar'] = copy_wavecar
+        stage['copy_chgcar'] = copy_chgcar
+    else:
+        stage['restart'] = None
 
-    # Load code
-    code = orm.load_code(code_label)
+    if kpoints_spacing != 0.03:
+        stage['kpoints_spacing'] = kpoints_spacing
+    if retrieve:
+        stage['retrieve'] = retrieve
 
-    # Get VASP workchain and wrap as task
-    VaspWorkChain = WorkflowFactory('vasp.v2.vasp')
-    VaspTask = task(VaspWorkChain)
+    # When restart_from is used without structure, pass a placeholder
+    # (the vasp brick will resolve structure from the restart PK)
+    seq_structure = structure
+    if seq_structure is None:
+        from .utils import prepare_restart_settings
+        restart_structure, _ = prepare_restart_settings(restart_from)
+        seq_structure = restart_structure
 
-    # Build WorkGraph
-    wg = WorkGraph(name=name)
-
-    # Prepare builder inputs
-    builder_inputs = _prepare_builder_inputs(
-        incar=incar,
+    result = quick_vasp_sequential(
+        structure=seq_structure,
+        stages=[stage],
+        code_label=code_label,
         kpoints_spacing=kpoints_spacing,
         potential_family=potential_family,
-        potential_mapping=potential_mapping or {},
+        potential_mapping=potential_mapping,
         options=options,
-        retrieve=retrieve,
-        restart_folder=restart_folder,
+        name=name,
+        wait=wait,
+        poll_interval=poll_interval,
         clean_workdir=clean_workdir,
     )
-
-    # Add VASP task
-    vasp_task = wg.add_task(
-        VaspTask,
-        name='vasp_calc',
-        structure=structure,
-        code=code,
-        **builder_inputs
-    )
-
-    # Add energy extraction task
-    energy_task = wg.add_task(
-        extract_total_energy,
-        name='extract_energy',
-        energies=vasp_task.outputs.misc,
-        retrieved=vasp_task.outputs.retrieved,
-    )
-
-    # Set WorkGraph outputs
-    wg.outputs.energy = energy_task.outputs.result
-    wg.outputs.structure = vasp_task.outputs.structure
-    wg.outputs.misc = vasp_task.outputs.misc
-    wg.outputs.retrieved = vasp_task.outputs.retrieved
-
-    # Submit
-    wg.submit()
-
-    # Wait if requested
-    if wait:
-        _wait_for_completion(wg.pk, poll_interval)
-
-    return wg.pk
+    return result['__workgraph_pk__']
 
 
 def quick_vasp_batch(
@@ -191,12 +157,14 @@ def quick_vasp_batch(
     wait: bool = False,
     poll_interval: float = 10.0,
     clean_workdir: bool = False,
-) -> t.Dict[str, int]:
+) -> dict:
     """
     Submit multiple VASP calculations with the same base settings.
 
-    Useful for Fukui-style calculations or comparing different structures
-    with consistent computational parameters.
+    Thin wrapper around quick_vasp_sequential that builds a single batch
+    stage with per-calculation structures and delegates. Useful for
+    Fukui-style calculations or comparing different structures with
+    consistent computational parameters.
 
     Args:
         structures: Dict mapping keys to StructureData or PKs
@@ -217,7 +185,9 @@ def quick_vasp_batch(
         clean_workdir: Whether to clean work directories after completion
 
     Returns:
-        Dict mapping structure keys to individual WorkGraph PKs
+        Dict with quick_vasp_sequential result keys including '__workgraph_pk__',
+        '__stage_names__', '__stage_types__', '__stage_namespaces__'.
+        Use get_stage_results(result, 'batch') to extract per-calculation results.
 
     Example:
         >>> # Same settings for all structures
@@ -254,86 +224,51 @@ def quick_vasp_batch(
     if incar_overrides is None:
         incar_overrides = {}
 
-    # Load code
-    code = orm.load_code(code_label)
-
-    # Get VASP workchain and wrap as task
-    VaspWorkChain = WorkflowFactory('vasp.v2.vasp')
-    VaspTask = task(VaspWorkChain)
-
-    # Build WorkGraph
-    wg = WorkGraph(name=name)
-
-    if max_concurrent_jobs is not None:
-        wg.max_number_jobs = max_concurrent_jobs
-
-    # Track task names for each key
-    task_map = {}
-
-    # Process each structure
+    # Build calculations dict for batch stage
+    calculations = {}
     for key, struct_input in structures.items():
-        # Load structure if PK
-        if isinstance(struct_input, int):
-            struct = orm.load_node(struct_input)
-        else:
-            struct = struct_input
-
-        # Merge base INCAR with per-structure overrides
+        calc_config = {}
+        # Per-calc structure
+        calc_config['structure'] = struct_input
+        # INCAR overrides
         if key in incar_overrides:
-            merged_incar = deep_merge_dicts(incar, incar_overrides[key])
-        else:
-            merged_incar = incar
+            calc_config['incar'] = incar_overrides[key]
+        calculations[key] = calc_config
 
-        # Prepare builder inputs
-        builder_inputs = _prepare_builder_inputs(
-            incar=merged_incar,
-            kpoints_spacing=kpoints_spacing,
-            potential_family=potential_family,
-            potential_mapping=potential_mapping or {},
-            options=options,
-            retrieve=retrieve,
-            restart_folder=None,
-            clean_workdir=clean_workdir,
-        )
-
-        # Add VASP task for this structure
-        task_name = f'vasp_{key}'
-        vasp_task = wg.add_task(
-            VaspTask,
-            name=task_name,
-            structure=struct,
-            code=code,
-            **builder_inputs
-        )
-
-        # Add energy extraction task
-        energy_task_name = f'energy_{key}'
-        wg.add_task(
-            extract_total_energy,
-            name=energy_task_name,
-            energies=vasp_task.outputs.misc,
-            retrieved=vasp_task.outputs.retrieved,
-        )
-
-        task_map[key] = {
-            'vasp_task': task_name,
-            'energy_task': energy_task_name,
-        }
-
-    # Submit
-    wg.submit()
-
-    # Wait if requested
-    if wait:
-        _wait_for_completion(wg.pk, poll_interval)
-
-    # Return the WorkGraph PK with keys for reference
-    # Users can extract individual results using get_batch_results_from_workgraph
-    return {
-        '__workgraph_pk__': wg.pk,
-        '__task_map__': task_map,
-        **{key: wg.pk for key in structures.keys()},
+    stage = {
+        'name': 'batch',
+        'type': 'batch',
+        'structure_from': 'input',
+        'base_incar': incar,
+        'calculations': calculations,
     }
+    if retrieve:
+        stage['retrieve'] = retrieve
+    if kpoints_spacing != 0.03:
+        stage['kpoints_spacing'] = kpoints_spacing
+
+    # Use first structure as input (will be overridden per-calc by batch brick)
+    first_key = next(iter(structures))
+    first_struct = structures[first_key]
+    if isinstance(first_struct, int):
+        first_struct = orm.load_node(first_struct)
+
+    result = quick_vasp_sequential(
+        structure=first_struct,
+        stages=[stage],
+        code_label=code_label,
+        kpoints_spacing=kpoints_spacing,
+        potential_family=potential_family,
+        potential_mapping=potential_mapping,
+        options=options,
+        max_concurrent_jobs=max_concurrent_jobs,
+        name=name,
+        wait=wait,
+        poll_interval=poll_interval,
+        clean_workdir=clean_workdir,
+    )
+
+    return result
 
 
 def quick_vasp_sequential(
@@ -380,7 +315,8 @@ def quick_vasp_sequential(
             - __stage_names__: List of stage names in order
             - __stage_types__: Dict mapping stage names to types
               ('vasp', 'dos', 'batch', 'bader', 'convergence', 'thickness',
-               'hubbard_response', 'hubbard_analysis', 'aimd', 'qe', 'cp2k',
+               'hubbard_response', 'hubbard_analysis', 'fukui_analysis',
+               'aimd', 'qe', 'cp2k',
                'generate_neb_images', or 'neb')
             - __stage_namespaces__: Dict mapping stage names to namespace_map dicts
             - <stage_name>: WorkGraph PK (for each stage)
@@ -389,7 +325,11 @@ def quick_vasp_sequential(
         - name (required): Unique stage identifier
         - type: 'vasp' (default) - standard VASP calculation
         - incar (required): INCAR parameters for this stage
-        - restart (required): None or stage name to restart from
+        - restart: None or stage name to restart from (mutually exclusive with restart_from)
+        - restart_from: int PK of external calculation to restart from
+          (mutually exclusive with restart). Sets restart folder and ISTART/ICHARG.
+        - copy_wavecar: Copy WAVECAR from restart_from (default: True, only with restart_from)
+        - copy_chgcar: Copy CHGCAR from restart_from (default: False, only with restart_from)
         - structure_from: 'previous' (default), 'input', or specific stage name
         - supercell: [nx, ny, nz] to create supercell
         - kpoints_spacing: Override k-points spacing for this stage
@@ -421,6 +361,7 @@ def quick_vasp_sequential(
         - base_incar (required): Base INCAR dict applied to ALL calculations
         - calculations (required): Dict of {label: overrides}, where each
           override dict may contain:
+            - structure: StructureData or int PK (overrides stage-level structure)
             - incar: INCAR keys to override/add on top of base_incar
             - kpoints: Explicit k-points mesh [nx, ny, nz]
             - kpoints_spacing: K-points spacing
@@ -435,8 +376,16 @@ def quick_vasp_sequential(
             {stage_name}_{calc_label}_remote
             {stage_name}_{calc_label}_retrieved
 
-        Note: Batch stages do NOT modify the structure. All calculations
-        run the same geometry with different electronic parameters.
+        Note: By default, batch stages use the same structure for all
+        calculations. Use per-calculation 'structure' to override this
+        (e.g., for comparing different structures with consistent settings).
+
+    Stage Configuration (Fukui analysis stages, type='fukui_analysis'):
+        - name (required): Unique stage identifier
+        - type: 'fukui_analysis'
+        - batch_from (required): Name of previous batch stage with CHGCAR retrieved
+        - fukui_type (required): 'plus' or 'minus'
+        - delta_n_map (required): Dict {calc_label: delta_n} with exactly 4 entries
 
     Stage Configuration (Generate NEB Images, type='generate_neb_images'):
         - name (required): Unique stage identifier

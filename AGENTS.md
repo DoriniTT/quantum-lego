@@ -31,6 +31,7 @@ verdi daemon logshow                          # Debug daemon issues
 ## Overview
 
 **Quantum Lego** provides modular, brick-based building blocks for composing AiiDA computational workflows. It supports VASP, Quantum ESPRESSO, and CP2K through a unified stage/brick abstraction.
+For VASP workflows, the canonical execution path is `quick_vasp_sequential()`: thin convenience APIs (`quick_vasp`, `quick_vasp_batch`, `quick_dos`, `quick_dos_sequential`) build stage configs and delegate to the same brick dispatcher.
 
 **Technology Stack:** AiiDA (workflow/provenance), AiiDA-WorkGraph (task composition), AiiDA-VASP (DFT), Pymatgen (structures), ASE (I/O)
 
@@ -54,8 +55,10 @@ quantum-lego/                    # Git repository root
 ├── quantum_lego/                 # Python package root
 │   ├── __init__.py               # Re-exports from core
 │   └── core/
-│       ├── __init__.py           # Public API: quick_vasp, get_results, etc.
-│       ├── workgraph.py          # WorkGraph builders (~2000 lines)
+│       ├── __init__.py           # Public API exports
+│       ├── workgraph.py          # Compatibility facade re-exporting builders
+│       ├── vasp_workflows.py     # quick_vasp_sequential + VASP wrappers
+│       ├── dos_workflows.py      # DOS wrappers + quick_dos_batch
 │       ├── tasks.py              # @task.calcfunction helpers
 │       ├── results.py            # Result extraction functions
 │       ├── utils.py              # Status, restart, file handling
@@ -126,10 +129,11 @@ quantum-lego/                    # Git repository root
 
 ```python
 from quantum_lego import (
-    quick_vasp,              # Single VASP calculation
-    quick_vasp_batch,        # Multiple parallel VASP calcs
-    quick_vasp_sequential,   # Multi-stage pipeline
-    quick_dos,               # DOS calculation (SCF + DOS)
+    quick_vasp,              # Thin wrapper (single VASP stage)
+    quick_vasp_batch,        # Thin wrapper (single batch stage)
+    quick_vasp_sequential,   # Central VASP pipeline (stages/bricks)
+    quick_dos,               # Thin wrapper (single DOS stage)
+    quick_dos_sequential,    # DOS-focused sequential wrapper
     quick_dos_batch,         # Multiple parallel DOS calcs
     quick_hubbard_u,         # Hubbard U calculation
     quick_aimd,              # AIMD simulation
@@ -141,6 +145,8 @@ from quantum_lego import (
     print_sequential_results,# Print multi-stage results
 )
 ```
+
+**VASP architecture rule:** implement VASP behavior changes in `quick_vasp_sequential` and/or `quantum_lego/core/bricks/*.py`; keep convenience wrappers thin and backward-compatible.
 
 ### Brick System
 
@@ -160,7 +166,7 @@ print_stage_results()    # Format results for display
 | Type | Module | Description |
 |------|--------|-------------|
 | `vasp` | `bricks/vasp.py` | Standard VASP calculation (relax, static SCF) |
-| `dos` | `bricks/dos.py` | Density of states via BandsWorkChain |
+| `dos` | `bricks/dos.py` | Density of states stage (internally uses BandsWorkChain) |
 | `batch` | `bricks/batch.py` | Parallel VASP runs with varying parameters |
 | `bader` | `bricks/bader.py` | Bader charge analysis |
 | `convergence` | `bricks/convergence.py` | ENCUT and k-points convergence testing |

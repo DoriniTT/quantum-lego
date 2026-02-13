@@ -1,6 +1,6 @@
 # Quantum Lego Visual Workflow Guide
 
-This guide provides visual diagrams for common computational workflows using Quantum Lego bricks.
+This guide provides visual diagrams for common computational workflows using Quantum Lego bricks. For VASP workflows, `quick_vasp_sequential()` is the central execution path behind stage/brick orchestration.
 
 ## Table of Contents
 
@@ -63,7 +63,7 @@ graph TD
 
 **Code:**
 ```python
-pk = quick_dos(
+result = quick_dos(
     structure=structure,
     code_label='VASP-6.5.1@localwork',
     scf_incar={'encut': 400, 'ediff': 1e-6},
@@ -72,6 +72,7 @@ pk = quick_dos(
     dos_kpoints_spacing=0.02,
     ...
 )
+dos_stage = get_stage_results(result, 'dos')
 ```
 
 ---

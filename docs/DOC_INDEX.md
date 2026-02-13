@@ -2,6 +2,8 @@
 
 Welcome to the Quantum Lego documentation! This page helps you navigate the documentation and find what you need.
 
+> **VASP architecture note:** the central VASP execution path is `quick_vasp_sequential()` (stage/brick dispatcher). Convenience APIs such as `quick_vasp`, `quick_vasp_batch`, `quick_dos`, and `quick_dos_sequential` delegate to this model.
+
 ## 🎯 Start Here
 
 **New to Quantum Lego?** Follow this path:

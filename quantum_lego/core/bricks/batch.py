@@ -93,6 +93,12 @@ def create_stage_tasks(
     energy_tasks = {}
 
     for calc_label, calc_config in calculations.items():
+        # Per-calc structure override or stage-level
+        calc_structure = input_structure
+        if 'structure' in calc_config:
+            explicit = calc_config['structure']
+            calc_structure = orm.load_node(explicit) if isinstance(explicit, int) else explicit
+
         # Deep-merge base_incar with per-calculation incar overrides
         calc_incar_overrides = calc_config.get('incar', {})
         if calc_incar_overrides:
@@ -125,7 +131,7 @@ def create_stage_tasks(
         vasp_task = wg.add_task(
             VaspTask,
             name=vasp_task_name,
-            structure=input_structure,
+            structure=calc_structure,
             code=code,
             **builder_inputs
         )

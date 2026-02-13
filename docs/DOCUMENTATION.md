@@ -2,7 +2,7 @@
 
 **Build computational workflows like Lego blocks!**
 
-Quantum Lego is a modular Python framework for building and composing computational chemistry workflows using AiiDA. It provides intuitive "brick" building blocks that can be connected together to create complex multi-stage calculations.
+Quantum Lego is a modular Python framework for building and composing computational chemistry workflows using AiiDA. It provides intuitive "brick" building blocks that can be connected together to create complex multi-stage calculations. For VASP workflows, the central execution path is `quick_vasp_sequential()`, with `quick_vasp`, `quick_vasp_batch`, and `quick_dos` acting as thin convenience wrappers.
 
 ## Table of Contents
 
@@ -204,7 +204,7 @@ pk = quick_vasp(
 
 ### 2. DOS Brick (`dos`)
 
-Density of states calculation using BandsWorkChain (automatic SCF + DOS chain).
+Density of states stage executed by the DOS brick (internally uses BandsWorkChain for automatic SCF + DOS).
 
 ```mermaid
 graph LR
@@ -222,9 +222,9 @@ graph LR
 
 **Example:**
 ```python
-from quantum_lego import quick_dos, get_dos_results
+from quantum_lego import quick_dos, get_stage_results
 
-pk = quick_dos(
+result = quick_dos(
     structure=structure,
     code_label='VASP-6.5.1@localwork',
     scf_incar={'encut': 400, 'ediff': 1e-6, 'ismear': 0},
@@ -238,12 +238,13 @@ pk = quick_dos(
     name='sno2_dos',
 )
 
-# Get results
-results = get_dos_results(pk)
-print(f"SCF Energy: {results['energy']:.4f} eV")
+# Get DOS stage results
+dos_stage = get_stage_results(result, 'dos')
+print(f"SCF Energy: {dos_stage['energy']:.4f} eV")
 ```
 
 **Note:** AiiDA-VASP requires lowercase INCAR keys for the DOS brick.
+For DOS-only stage pipelines, use `quick_dos_sequential(...)` (DOS-focused wrapper over `quick_vasp_sequential`).
 
 ### 3. Batch Brick (`batch`)
 
@@ -918,6 +919,7 @@ For `localwork` (development), use `max_concurrent_jobs=1` since it runs jobs se
 from quantum_lego import (
     get_results,
     get_energy,
+    get_stage_results,
     get_dos_results,
     get_batch_results,
     export_files,
@@ -927,8 +929,11 @@ from quantum_lego import (
 results = get_results(pk)
 energy = get_energy(pk)  # Shortcut
 
-# DOS calculation
-dos_results = get_dos_results(pk)
+# DOS stage from quick_dos / quick_vasp_sequential result
+dos_stage = get_stage_results(dos_result, 'dos')
+
+# Advanced: raw BandsWorkChain PK
+dos_results = get_dos_results(bands_pk)
 
 # Batch results
 batch_results = get_batch_results(result)

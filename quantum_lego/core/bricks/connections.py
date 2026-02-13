@@ -39,6 +39,7 @@ PORT_TYPES = {
     'hubbard_occupation',
     'hubbard_result',
     'neb_images',
+    'eos_result',
 }
 
 
@@ -167,6 +168,45 @@ BATCH_PORTS = {
             'per_calculation': True,
         },
         # NOTE: no 'structure' output — batch does not produce structures
+    },
+}
+
+FUKUI_ANALYSIS_PORTS = {
+    'inputs': {
+        'batch_retrieved': {
+            'type': 'retrieved',
+            'required': True,
+            'source': 'batch_from',
+            'compatible_bricks': ['batch'],
+            'prerequisites': {
+                'retrieve': ['CHGCAR'],
+            },
+            'description': 'Retrieved folders from batch stage (must contain CHGCAR)',
+        },
+    },
+    'outputs': {
+        'fukui_chgcar': {
+            'type': 'file',
+            'description': 'Interpolated Fukui function (CHGCAR_FUKUI.vasp)',
+        },
+    },
+}
+
+BIRCH_MURNAGHAN_PORTS = {
+    'inputs': {
+        'batch_energies': {
+            'type': 'energy',
+            'required': True,
+            'source': 'batch_from',
+            'compatible_bricks': ['batch'],
+            'description': 'Energy outputs from batch stage',
+        },
+    },
+    'outputs': {
+        'eos_result': {
+            'type': 'eos_result',
+            'description': 'Birch-Murnaghan EOS fit results (V0, E0, B0, B1)',
+        },
     },
 }
 
@@ -571,6 +611,8 @@ ALL_PORTS = {
     'vasp': VASP_PORTS,
     'dos': DOS_PORTS,
     'batch': BATCH_PORTS,
+    'fukui_analysis': FUKUI_ANALYSIS_PORTS,
+    'birch_murnaghan': BIRCH_MURNAGHAN_PORTS,
     'bader': BADER_PORTS,
     'hubbard_response': HUBBARD_RESPONSE_PORTS,
     'hubbard_analysis': HUBBARD_ANALYSIS_PORTS,

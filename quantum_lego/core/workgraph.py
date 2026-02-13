@@ -9,14 +9,14 @@ This facade is permanent - existing code using
 
 The actual implementations live in:
 - vasp_workflows.py: quick_vasp, quick_vasp_batch, quick_vasp_sequential
-- dos_workflows.py: quick_dos, quick_dos_batch
+- dos_workflows.py: quick_dos, quick_dos_batch, quick_dos_sequential
 - qe_workflows.py: quick_qe, quick_qe_sequential
 - specialized_workflows.py: quick_hubbard_u, quick_aimd
 - workflow_utils.py: shared utilities and get_batch_results_from_workgraph
 """
 
 from .vasp_workflows import quick_vasp, quick_vasp_batch, quick_vasp_sequential
-from .dos_workflows import quick_dos, quick_dos_batch
+from .dos_workflows import quick_dos, quick_dos_batch, quick_dos_sequential
 from .qe_workflows import quick_qe, quick_qe_sequential
 from .specialized_workflows import quick_hubbard_u, quick_aimd
 from .workflow_utils import (
@@ -35,6 +35,7 @@ __all__ = [
     'quick_vasp_sequential',
     'quick_dos',
     'quick_dos_batch',
+    'quick_dos_sequential',
     'quick_qe',
     'quick_qe_sequential',
     'quick_hubbard_u',

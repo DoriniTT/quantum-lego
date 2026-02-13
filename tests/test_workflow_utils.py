@@ -78,6 +78,66 @@ class TestValidateStages:
         stages = [{'name': 'relax', 'type': 'vasp', 'incar': {'NSW': 100}, 'restart': None}]
         self._validate(stages)
 
+    def test_fukui_analysis_stage_passes_with_valid_batch_source(self):
+        stages = [
+            {
+                'name': 'fukui_minus',
+                'type': 'batch',
+                'structure_from': 'input',
+                'base_incar': {'nsw': 0},
+                'retrieve': ['CHGCAR'],
+                'calculations': {
+                    'neutral': {'incar': {'nelect': 100.0}},
+                    'delta_005': {'incar': {'nelect': 99.95}},
+                    'delta_010': {'incar': {'nelect': 99.90}},
+                    'delta_015': {'incar': {'nelect': 99.85}},
+                },
+            },
+            {
+                'name': 'fukui_minus_analysis',
+                'type': 'fukui_analysis',
+                'batch_from': 'fukui_minus',
+                'fukui_type': 'minus',
+                'delta_n_map': {
+                    'neutral': 0.0,
+                    'delta_005': 0.05,
+                    'delta_010': 0.10,
+                    'delta_015': 0.15,
+                },
+            },
+        ]
+        self._validate(stages)
+
+    def test_fukui_analysis_stage_rejects_wrong_delta_n_map_size(self):
+        stages = [
+            {
+                'name': 'fukui_minus',
+                'type': 'batch',
+                'structure_from': 'input',
+                'base_incar': {'nsw': 0},
+                'retrieve': ['CHGCAR'],
+                'calculations': {
+                    'neutral': {'incar': {'nelect': 100.0}},
+                    'delta_005': {'incar': {'nelect': 99.95}},
+                    'delta_010': {'incar': {'nelect': 99.90}},
+                    'delta_015': {'incar': {'nelect': 99.85}},
+                },
+            },
+            {
+                'name': 'fukui_minus_analysis',
+                'type': 'fukui_analysis',
+                'batch_from': 'fukui_minus',
+                'fukui_type': 'minus',
+                'delta_n_map': {
+                    'neutral': 0.0,
+                    'delta_005': 0.05,
+                    'delta_010': 0.10,
+                },
+            },
+        ]
+        with pytest.raises(ValueError, match="exactly 4 entries"):
+            self._validate(stages)
+
 
 @pytest.mark.tier1
 class TestBackwardCompatImports:
@@ -116,6 +176,10 @@ class TestBackwardCompatImports:
         from quantum_lego.core.workgraph import quick_dos_batch
         assert callable(quick_dos_batch)
 
+    def test_quick_dos_sequential_importable_from_workgraph(self):
+        from quantum_lego.core.workgraph import quick_dos_sequential
+        assert callable(quick_dos_sequential)
+
     def test_quick_qe_importable_from_workgraph(self):
         from quantum_lego.core.workgraph import quick_qe
         assert callable(quick_qe)
@@ -135,3 +199,57 @@ class TestBackwardCompatImports:
     def test_get_batch_results_from_workgraph_importable(self):
         from quantum_lego.core.workgraph import get_batch_results_from_workgraph
         assert callable(get_batch_results_from_workgraph)
+
+
+@pytest.mark.tier1
+class TestDosWrappers:
+    """Tests for DOS wrapper delegation behavior."""
+
+    def test_quick_dos_sequential_delegates_to_quick_vasp_sequential(self, monkeypatch):
+        from quantum_lego.core import dos_workflows
+        from quantum_lego.core import vasp_workflows
+
+        captured = {}
+
+        def fake_quick_vasp_sequential(**kwargs):
+            captured.update(kwargs)
+            return {'__workgraph_pk__': 321, '__stage_names__': ['dos']}
+
+        monkeypatch.setattr(vasp_workflows, 'quick_vasp_sequential', fake_quick_vasp_sequential)
+
+        result = dos_workflows.quick_dos_sequential(
+            structure='dummy-structure',
+            stages=[{'name': 'dos', 'scf_incar': {'encut': 400}, 'dos_incar': {'nedos': 2000}}],
+            code_label='dummy-code',
+            options={'resources': {'num_machines': 1}},
+        )
+
+        assert result['__workgraph_pk__'] == 321
+        assert captured['stages'][0]['type'] == 'dos'
+
+    def test_quick_dos_wraps_single_dos_stage(self, monkeypatch):
+        from quantum_lego.core import dos_workflows
+
+        captured = {}
+
+        def fake_quick_dos_sequential(**kwargs):
+            captured.update(kwargs)
+            return {'__workgraph_pk__': 999, '__stage_names__': ['dos']}
+
+        monkeypatch.setattr(dos_workflows, 'quick_dos_sequential', fake_quick_dos_sequential)
+
+        result = dos_workflows.quick_dos(
+            structure='dummy-structure',
+            code_label='dummy-code',
+            scf_incar={'encut': 400},
+            dos_incar={'nedos': 2000},
+            options={'resources': {'num_machines': 1}},
+        )
+
+        assert result == {'__workgraph_pk__': 999}
+        stage = captured['stages'][0]
+        assert stage['type'] == 'dos'
+        assert stage['name'] == 'dos'
+        assert stage['structure'] == 'dummy-structure'
+        assert stage['scf_incar']['lwave'] is True
+        assert stage['scf_incar']['lcharg'] is True

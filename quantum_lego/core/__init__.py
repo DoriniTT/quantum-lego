@@ -56,11 +56,11 @@ Example usage:
 
 DOS calculation using BandsWorkChain:
 
-    >>> from quantum_lego import quick_dos, get_dos_results
+    >>> from quantum_lego import quick_dos, quick_dos_sequential, get_stage_results
     >>>
     >>> # DOS calculation (SCF + DOS handled internally)
     >>> # Note: AiiDA-VASP requires lowercase INCAR keys
-    >>> pk = quick_dos(
+    >>> result = quick_dos(
     ...     structure=my_structure,
     ...     code_label='VASP-6.5.1@localwork',
     ...     scf_incar={'encut': 400, 'ediff': 1e-6, 'ismear': 0},
@@ -74,7 +74,7 @@ DOS calculation using BandsWorkChain:
     ... )
     >>>
     >>> # Get DOS results
-    >>> results = get_dos_results(pk)
+    >>> results = get_stage_results(result, 'dos')
     >>> print(f"Energy: {results['energy']:.4f} eV")
 
 Batch DOS calculation (multiple structures in parallel):
@@ -182,6 +182,7 @@ from .workgraph import (
     quick_vasp_sequential,
     quick_dos,
     quick_dos_batch,
+    quick_dos_sequential,
     quick_hubbard_u,
     quick_aimd,
     quick_qe,
@@ -226,6 +227,7 @@ __all__ = [
     'quick_vasp_sequential',
     'quick_dos',
     'quick_dos_batch',
+    'quick_dos_sequential',
     'quick_hubbard_u',
     'quick_aimd',
     'quick_qe',

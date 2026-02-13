@@ -85,11 +85,11 @@ pks = quick_vasp_batch(
 
 #### `quick_dos()`
 
-Submit a DOS calculation using the BandsWorkChain (SCF + DOS internally).
+Submit a single DOS calculation via the stage/brick system.
 
 ```python
 # Note: AiiDA-VASP requires lowercase INCAR keys
-pk = quick_dos(
+result = quick_dos(
     structure=structure,           # StructureData or PK
     code_label='VASP-6.5.1@...',   # VASP code label
     scf_incar={'encut': 400, 'ediff': 1e-6, 'ismear': 0},  # SCF parameters
@@ -102,11 +102,36 @@ pk = quick_dos(
     retrieve=['DOSCAR'],           # Extra files to retrieve (merged with defaults)
     name='sno2_dos',
 )
+pk = result['__workgraph_pk__']
 ```
 
 **Forced INCAR parameters (lowercase):**
 - SCF: `lwave=True`, `lcharg=True` (outputs wavefunctions and charge_density)
 - DOS: `icharg=11`, `istart=1` (non-SCF from existing charge/wavefunction)
+
+#### `quick_dos_sequential()`
+
+Submit one or more DOS stages as a sequential WorkGraph.
+
+```python
+from quantum_lego.core import quick_dos_sequential
+
+result = quick_dos_sequential(
+    structure=initial_structure,
+    stages=[
+        {
+            'name': 'dos_relaxed',
+            'scf_incar': {'encut': 520, 'ediff': 1e-6},
+            'dos_incar': {'nedos': 2000, 'lorbit': 11, 'ismear': -5},
+            'structure': initial_structure,
+        }
+    ],
+    code_label='VASP-6.5.1@localwork',
+    potential_family='PBE',
+    potential_mapping={'Sn': 'Sn_d', 'O': 'O'},
+    options={'resources': {'num_machines': 1, 'num_mpiprocs_per_machine': 8}},
+)
+```
 
 ### Result Functions
 
@@ -239,14 +264,14 @@ pk2 = quick_vasp(
 ## DOS Calculation (quick_dos)
 
 For DOS calculations, `quick_dos` provides a simpler interface that handles
-the SCF → DOS chain automatically via the BandsWorkChain:
+the SCF → DOS chain via the DOS brick in `quick_vasp_sequential`:
 
 ```python
-from quantum_lego.core import quick_dos, get_dos_results, print_dos_results
+from quantum_lego.core import quick_dos, get_stage_results, print_sequential_results
 
 # Submit DOS calculation
 # Note: AiiDA-VASP requires lowercase INCAR keys
-pk = quick_dos(
+result = quick_dos(
     structure=my_structure,
     code_label='VASP-6.5.1@localwork',
     scf_incar={
@@ -270,12 +295,12 @@ pk = quick_dos(
 )
 
 # Wait for completion, then get results
-results = get_dos_results(pk)
-print(f"Energy: {results['energy']:.4f} eV")
-print(f"Files: {results['files'].list_object_names()}")
+stage = get_stage_results(result, 'dos')
+print(f"Energy: {stage['energy']:.4f} eV")
+print(f"Files: {stage['files'].list_object_names()}")
 
 # Or use the formatted printer
-print_dos_results(pk)
+print_sequential_results(result)
 ```
 
 ## Fukui-Style Batch Example

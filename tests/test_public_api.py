@@ -18,6 +18,7 @@ def test_core_functions_importable():
         quick_vasp_sequential,
         quick_dos,
         quick_dos_batch,
+        quick_dos_sequential,
         quick_hubbard_u,
         quick_aimd,
         quick_qe,
@@ -28,6 +29,7 @@ def test_core_functions_importable():
     assert callable(quick_vasp_sequential)
     assert callable(quick_dos)
     assert callable(quick_dos_batch)
+    assert callable(quick_dos_sequential)
     assert callable(quick_hubbard_u)
     assert callable(quick_aimd)
     assert callable(quick_qe)

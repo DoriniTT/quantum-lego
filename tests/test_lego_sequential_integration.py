@@ -136,6 +136,12 @@ class TestSequentialImportsAndBasic:
         assert quick_dos is not None
         assert callable(quick_dos)
 
+    def test_quick_dos_sequential_importable(self):
+        """quick_dos_sequential should be importable."""
+        from quantum_lego.core import quick_dos_sequential
+        assert quick_dos_sequential is not None
+        assert callable(quick_dos_sequential)
+
     def test_quick_vasp_batch_importable(self):
         """quick_vasp_batch should be importable."""
         from quantum_lego.core import quick_vasp_batch

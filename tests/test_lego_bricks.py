@@ -115,14 +115,15 @@ class TestBrickRegistry:
     def test_valid_brick_types_tuple(self):
         from quantum_lego.core.bricks import VALID_BRICK_TYPES
         assert VALID_BRICK_TYPES == (
-            'vasp', 'dos', 'batch', 'bader', 'convergence', 'thickness',
+            'vasp', 'dos', 'batch', 'fukui_analysis', 'birch_murnaghan',
+            'bader', 'convergence', 'thickness',
             'hubbard_response', 'hubbard_analysis', 'aimd', 'qe', 'cp2k',
             'generate_neb_images', 'neb',
         )
 
-    def test_registry_has_thirteen_entries(self):
+    def test_registry_has_fifteen_entries(self):
         from quantum_lego.core.bricks import BRICK_REGISTRY
-        assert len(BRICK_REGISTRY) == 13
+        assert len(BRICK_REGISTRY) == 15
 
     def test_get_brick_module_valid_types(self):
         from quantum_lego.core.bricks import get_brick_module, VALID_BRICK_TYPES
