@@ -35,7 +35,7 @@ Welcome to the Quantum Lego documentation! This page helps you navigate the docu
 ### [DOCUMENTATION.md](DOCUMENTATION.md) - Complete Reference
 **Who:** All users wanting comprehensive information
 **What you'll learn:**
-- All 16 brick types in detail
+- All brick types in detail
 - Port system and connection validation
 - Sequential workflow patterns
 - Batch operations
@@ -48,7 +48,7 @@ Welcome to the Quantum Lego documentation! This page helps you navigate the docu
 
 **Key sections:**
 - [Core Concepts](DOCUMENTATION.md#core-concepts) - Understanding the brick system
-- [Brick Types](DOCUMENTATION.md#brick-types) - All 16 brick types explained
+- [Brick Types](DOCUMENTATION.md#brick-types) - All brick types explained
 - [Sequential Workflows](DOCUMENTATION.md#sequential-workflows) - Multi-stage calculations
 - [Batch Operations](DOCUMENTATION.md#batch-operations) - Parallel calculations
 - [Examples](DOCUMENTATION.md#examples) - Working code samples
@@ -229,6 +229,7 @@ Quick lookup table for all brick types:
 | `cp2k` | CP2K calculations | [Docs](DOCUMENTATION.md#11-cp2k-brick-cp2k) | - |
 | `birch_murnaghan` | EOS fitting | [Docs](DOCUMENTATION.md#12-birch-murnaghan-brick-birch_murnaghan) | [Visual](VISUAL_GUIDE.md#birch-murnaghan-eos) |
 | `birch_murnaghan_refine` | Refined EOS scan | [Docs](DOCUMENTATION.md#13-birch-murnaghan-refine-brick-birch_murnaghan_refine) | [Visual](VISUAL_GUIDE.md#birch-murnaghan-eos) |
+| `surface_enumeration` | Surface orientation enumeration | [Docs](DOCUMENTATION.md#14-surface-enumeration-brick-surface_enumeration) | - |
 | `fukui_analysis` | Fukui index analysis | [Docs](DOCUMENTATION.md#14-fukui-analysis-brick-fukui_analysis) | - |
 
 ---
@@ -294,7 +295,7 @@ quantum-lego/
 ├── DOC_INDEX.md           ← This file
 ├── quantum_lego/          ← Python package
 │   └── core/
-│       ├── bricks/        ← 16 brick types
+│       ├── bricks/        ← brick types
 │       ├── common/        ← Utilities
 │       └── ...
 ├── examples/              ← Working examples

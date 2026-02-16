@@ -17,6 +17,7 @@ _VASP_RETRIEVE_STAGE_TYPES = {
     'aimd',
     'neb',
     'dos',
+    'hybrid_bands',
 }
 
 # ---------------------------------------------------------------------------
@@ -25,7 +26,9 @@ _VASP_RETRIEVE_STAGE_TYPES = {
 
 PORT_TYPES = {
     'structure',
+    'structures',
     'energy',
+    'energies',
     'misc',
     'remote_folder',
     'retrieved',
@@ -40,6 +43,9 @@ PORT_TYPES = {
     'hubbard_result',
     'neb_images',
     'eos_result',
+    'band_structure',
+    'surface_families',
+    'formation_enthalpy',
 }
 
 
@@ -638,10 +644,124 @@ NEB_PORTS = {
     },
 }
 
+SURFACE_ENUMERATION_PORTS = {
+    'inputs': {
+        'structure': {
+            'type': 'structure',
+            'required': True,
+            'source': 'structure_from',
+            'description': 'Bulk structure for surface enumeration',
+        },
+    },
+    'outputs': {
+        'surface_families': {
+            'type': 'surface_families',
+            'description': 'Dict with distinct Miller indices and symmetry info',
+        },
+    },
+}
+
+SURFACE_TERMINATIONS_PORTS = {
+    'inputs': {
+        'structure': {
+            'type': 'structure',
+            'required': True,
+            'source': 'structure_from',
+            'description': 'Bulk structure to generate slab terminations from',
+        },
+    },
+    'outputs': {
+        'structures': {
+            'type': 'structures',
+            'description': 'Dynamic dict of slab terminations (StructureData)',
+        },
+        'manifest': {
+            'type': 'misc',
+            'description': 'Metadata dict for generated terminations (shifts, labels, parameters)',
+        },
+    },
+}
+
+DYNAMIC_BATCH_PORTS = {
+    'inputs': {
+        'structures': {
+            'type': 'structures',
+            'required': True,
+            'source': 'structures_from',
+            'description': 'Dictionary of structures to relax in parallel',
+        },
+    },
+    'outputs': {
+        'structures': {
+            'type': 'structures',
+            'description': 'Relaxed structures (StructureData)',
+        },
+        'energies': {
+            'type': 'energies',
+            'description': 'Total energies for each structure (Float)',
+        },
+    },
+}
+
+FORMATION_ENTHALPY_PORTS = {
+    'inputs': {
+        'structure': {
+            'type': 'structure',
+            'required': True,
+            'source': 'structure_from',
+            'description': 'Target compound structure',
+        },
+        'energy': {
+            'type': 'energy',
+            'required': True,
+            'source': 'energy_from',
+            'description': 'Target compound total energy (eV)',
+        },
+    },
+    'outputs': {
+        'formation_enthalpy': {
+            'type': 'formation_enthalpy',
+            'description': 'Formation enthalpy summary Dict (ΔHf)',
+        },
+    },
+}
+
+HYBRID_BANDS_PORTS = {
+    'inputs': {
+        'structure': {
+            'type': 'structure',
+            'required': True,
+            'source': 'structure_from',
+            'description': 'Structure to compute hybrid band structure for',
+        },
+    },
+    'outputs': {
+        'energy': {
+            'type': 'energy',
+            'description': 'SCF energy (from split calculations)',
+        },
+        'scf_misc': {
+            'type': 'misc',
+            'description': 'SCF parsed results (from split calculations)',
+        },
+        'band_structure': {
+            'type': 'band_structure',
+            'description': 'Computed band structure with labels',
+        },
+        'scf_remote': {
+            'type': 'remote_folder',
+            'description': 'SCF remote folder (from split calculations)',
+        },
+        # NOTE: no 'structure' output — hybrid_bands doesn't modify structure
+        # NOTE: no DOS outputs — VaspHybridBandsWorkChain doesn't run DOS
+    },
+}
+
 # Registry mapping brick type name -> PORTS dict
 ALL_PORTS = {
     'vasp': VASP_PORTS,
     'dos': DOS_PORTS,
+    'hybrid_bands': HYBRID_BANDS_PORTS,
     'batch': BATCH_PORTS,
     'fukui_analysis': FUKUI_ANALYSIS_PORTS,
     'birch_murnaghan': BIRCH_MURNAGHAN_PORTS,
@@ -656,6 +776,10 @@ ALL_PORTS = {
     'cp2k': CP2K_PORTS,
     'generate_neb_images': GENERATE_NEB_IMAGES_PORTS,
     'neb': NEB_PORTS,
+    'surface_enumeration': SURFACE_ENUMERATION_PORTS,
+    'surface_terminations': SURFACE_TERMINATIONS_PORTS,
+    'dynamic_batch': DYNAMIC_BATCH_PORTS,
+    'formation_enthalpy': FORMATION_ENTHALPY_PORTS,
 }
 
 

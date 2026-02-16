@@ -15,6 +15,7 @@ no AiiDA dependency) so they can be imported in tier1 tests.
 from . import (
     vasp,
     dos,
+    hybrid_bands,
     batch,
     fukui_analysis,
     birch_murnaghan,
@@ -29,6 +30,10 @@ from . import (
     cp2k,
     generate_neb_images,
     neb,
+    surface_enumeration,
+    surface_terminations,
+    dynamic_batch,
+    formation_enthalpy,
 )
 from .connections import (  # noqa: F401
     PORT_TYPES,
@@ -43,6 +48,7 @@ from .connections import (  # noqa: F401
 BRICK_REGISTRY = {
     'vasp': vasp,
     'dos': dos,
+    'hybrid_bands': hybrid_bands,
     'batch': batch,
     'fukui_analysis': fukui_analysis,
     'birch_murnaghan': birch_murnaghan,
@@ -57,6 +63,10 @@ BRICK_REGISTRY = {
     'cp2k': cp2k,
     'generate_neb_images': generate_neb_images,
     'neb': neb,
+    'surface_enumeration': surface_enumeration,
+    'surface_terminations': surface_terminations,
+    'dynamic_batch': dynamic_batch,
+    'formation_enthalpy': formation_enthalpy,
 }
 
 VALID_BRICK_TYPES = tuple(BRICK_REGISTRY.keys())

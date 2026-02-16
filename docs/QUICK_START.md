@@ -248,6 +248,7 @@ Available brick types:
 - `batch` - Parallel calculations
 - `aimd` - Molecular dynamics
 - `convergence` - Parameter convergence tests
+- `surface_enumeration` - Enumerate symmetrically distinct surface orientations
 - `bader` - Charge analysis
 - `neb` - Reaction pathways
 - `qe` - Quantum ESPRESSO

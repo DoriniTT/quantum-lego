@@ -151,7 +151,7 @@ result = quick_vasp_sequential(structure, stages=stages, ...)
 
 ## Brick Types
 
-Quantum Lego provides **16 brick types** for different calculation workflows. Each brick follows the same pattern:
+Quantum Lego provides a set of brick types for different calculation workflows. Each brick follows the same pattern:
 
 ```python
 # Each brick exports:
@@ -583,6 +583,64 @@ stages = [
         'refine_n_points': 7,
     },
 ]
+```
+
+### 14. Surface Enumeration Brick (`surface_enumeration`)
+
+Determines all symmetrically non-equivalent low-index surface orientations for a bulk crystal. Pure-Python analysis brick (no VASP, no scheduler) — runs as an AiiDA calcfunction using pymatgen's symmetry utilities.
+
+```mermaid
+graph LR
+    A[Bulk Structure] --> B[Surface Enumeration Brick]
+    B --> C[Distinct Miller Indices<br/>+ Symmetry Families]
+
+    style B fill:#FF9800,stroke:#E65100,color:#fff
+```
+
+**Use cases:** Wulff construction planning, determining which surfaces to study, symmetry analysis
+
+**Inputs:**
+- `structure_from`: Source of the bulk structure (`'input'` or a previous stage)
+- `max_index`: Maximum Miller index to consider (default: 1)
+- `symprec`: Symmetry precision for SpacegroupAnalyzer (default: 0.01)
+
+**Outputs:**
+- `surface_families`: Dict with crystal system, space group, point group, distinct Miller indices, and symmetry-equivalent families for each
+
+**Example:**
+```python
+stages = [
+    {
+        'name': 'relax',
+        'type': 'vasp',
+        'incar': {'encut': 520, 'nsw': 100, 'ibrion': 2, 'isif': 3},
+        'restart': None,
+    },
+    {
+        'name': 'enumerate_surfaces',
+        'type': 'surface_enumeration',
+        'structure_from': 'relax',  # or 'input' for initial structure
+        'max_index': 1,
+        'symprec': 0.01,
+    },
+]
+```
+
+**Output Dict structure:**
+```python
+{
+    'crystal_system': 'tetragonal',
+    'space_group_symbol': 'P4_2/mnm',
+    'space_group_number': 136,
+    'point_group': '4/mmm',
+    'max_index': 1,
+    'n_distinct_surfaces': 5,
+    'distinct_miller_indices': [[1,0,0], [0,0,1], [1,0,1], [1,1,0], [1,1,1]],
+    'families': {
+        '(1, 0, 0)': [[1,0,0], [0,1,0], [-1,0,0], [0,-1,0]],
+        ...
+    },
+}
 ```
 
 ---

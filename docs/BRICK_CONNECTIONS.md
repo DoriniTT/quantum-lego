@@ -74,7 +74,7 @@ graph TB
 
 ## Port Type System
 
-The brick connection system uses 15 typed ports for data flow:
+The brick connection system uses typed ports for data flow:
 
 ```mermaid
 graph LR
@@ -101,6 +101,7 @@ graph LR
         HR[hubbard_responses]
         HO[hubbard_occupation]
         HRES[hubbard_result]
+        SF[surface_families]
     end
 
     subgraph "EOS Types"
@@ -125,6 +126,7 @@ graph LR
     style HR fill:#9C27B0,color:#fff
     style HO fill:#9C27B0,color:#fff
     style HRES fill:#9C27B0,color:#fff
+    style SF fill:#FF9800,color:#fff
     style FILE fill:#607D8B,color:#fff
     style NEB_I fill:#795548,color:#fff
     style EOS_R fill:#E91E63,color:#fff
@@ -666,6 +668,7 @@ warnings = validate_connections(stages)
 | **bader** | From stage | No | No | No | Yes | No |
 | **convergence** | Optional | No | No | No | No | No |
 | **thickness** | Optional | No | No | No | No | No |
+| **surface_enumeration** | From stage or input | No | No | No | No | No |
 | **hubbard_response** | From stage | No | No | No | Yes (ground state) | No |
 | **hubbard_analysis** | From stage | No | No | No | No (uses response data) | No |
 | **aimd** | Yes | Yes | Yes | Yes | No | Via `restart` |

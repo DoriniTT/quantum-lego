@@ -16,6 +16,7 @@ __all__ = [
     'StageTasksResult',
     'VaspResults',
     'DosResults',
+    'HybridBandsResults',
     'BatchResults',
 ]
 
@@ -154,6 +155,26 @@ class DosResults(TypedDict, total=False):
     dos_misc: Union[Dict[str, Any], None]
     dos: Any  # AiiDA ArrayData or None
     projectors: Any  # AiiDA ArrayData or None
+    pk: int
+
+
+class HybridBandsResults(TypedDict, total=False):
+    """Results from a hybrid bands calculation.
+
+    VaspHybridBandsWorkChain does not run DOS. SCF misc/remote are
+    extracted from split calculation children via link traversal.
+
+    Attributes:
+        energy: Total energy from SCF step in eV (None if extraction failed)
+        scf_misc: Parsed VASP results from a split SCF calculation
+        band_structure: Band structure data (BandsData or None)
+        scf_remote: Remote folder from a split SCF calculation
+        pk: Process PK
+    """
+    energy: Union[float, None]
+    scf_misc: Union[Dict[str, Any], None]
+    band_structure: Any  # AiiDA BandsData or None
+    scf_remote: Any  # AiiDA RemoteData or None
     pk: int
 
 

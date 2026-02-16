@@ -314,7 +314,8 @@ def quick_vasp_sequential(
             - __workgraph_pk__: WorkGraph PK
             - __stage_names__: List of stage names in order
             - __stage_types__: Dict mapping stage names to types
-              ('vasp', 'dos', 'batch', 'bader', 'convergence', 'thickness',
+              ('vasp', 'dos', 'hybrid_bands', 'batch', 'bader',
+               'convergence', 'thickness',
                'hubbard_response', 'hubbard_analysis', 'fukui_analysis',
                'aimd', 'qe', 'cp2k',
                'generate_neb_images', or 'neb')
@@ -535,6 +536,8 @@ def quick_vasp_sequential(
         if stage_type == 'dos':
             namespace_map['scf'] = indexed_name
             namespace_map['dos'] = indexed_name
+        elif stage_type == 'hybrid_bands':
+            namespace_map['scf'] = indexed_name
 
         stage_namespaces[stage_name] = namespace_map
         brick.expose_stage_outputs(wg, stage_name, tasks_result, namespace_map)
