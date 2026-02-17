@@ -1,0 +1,268 @@
+name: Review and Improve Examples
+
+# Reviews, improves, and better organizes the 10-category example suite.
+# Primary engine: Claude Sonnet 4.6 via Claude AI Pro subscription.
+# Alternative engine: GitHub Copilot with gpt-codex-5.3 (opt-in via input).
+
+on:
+  workflow_dispatch:
+    inputs:
+      use_copilot:
+        description: >
+          Use GitHub Copilot (gpt-codex-5.3) instead of Claude Sonnet 4.6.
+          Requires a GitHub Copilot subscription and access to GitHub Models.
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Job 1: Claude Sonnet 4.6 (default)
+  # ──────────────────────────────────────────────
+  claude-examples-review:
+    name: Claude Sonnet 4.6 — Examples Review
+    if: ${{ !inputs.use_copilot }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # Allow Claude to commit improvements
+      pull-requests: write   # Allow Claude to open PRs with changes
+      issues: write          # Allow Claude to create summary issues
+      id-token: write        # Required by claude-code-action
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Review and improve examples (Claude Sonnet 4.6)
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: "--model claude-sonnet-4-6"
+          prompt: |
+            You are reviewing the quantum-lego Python library for computational chemistry workflows.
+            Your task is to review, improve, and better organize the examples directory.
+
+            ## Scope
+
+            Read and analyze the entire `examples/` directory:
+            - `examples/01_getting_started/` — first calculation tutorials
+            - `examples/02_dos/`             — density of states examples
+            - `examples/03_batch/`           — parallel batch calculation examples
+            - `examples/04_sequential/`      — multi-stage workflow examples
+            - `examples/05_convergence/`     — convergence testing examples
+            - `examples/06_surface/`         — surface analysis examples
+            - `examples/07_advanced_vasp/`   — advanced DFT examples
+            - `examples/08_aimd/`            — molecular dynamics examples
+            - `examples/09_other_codes/`     — Quantum ESPRESSO and CP2K examples
+            - `examples/10_utilities/`       — utility and tooling demos
+            - `examples/_shared/`            — shared config and structure helpers
+
+            Also read for context:
+            - `docs/QUICK_START.md`
+            - `docs/DOCUMENTATION.md` (sections relevant to examples)
+            - `quantum_lego/core/__init__.py` (public API)
+
+            ## Review checklist
+
+            1. **Code quality** – check each example for correct imports, consistent
+               coding style, and usage of the current public API. Fix any deprecated
+               or incorrect API calls.
+
+            2. **Documentation within examples** – every example should have a module-
+               level docstring explaining what it demonstrates and what prerequisites
+               are needed (AiiDA profile, VASP binary, etc.).
+
+            3. **Organization** – assess whether the 10-category structure is logical.
+               Suggest or implement renames, merges, or splits if they improve clarity.
+
+            4. **Missing examples** – identify important bricks or workflows that have
+               no example (e.g., `bader.py`, `neb.py`, `hybrid_bands.py`,
+               `formation_enthalpy.py`, `fukui_analysis.py`) and create placeholder
+               examples with clear TODO comments.
+
+            5. **README / index** – check whether `examples/README.md` exists and is
+               complete. If missing or outdated, create or update it with a table
+               listing all categories and what each example demonstrates.
+
+            6. **Shared utilities** – review `examples/_shared/config.py` and
+               `examples/_shared/structures.py` for completeness and correctness.
+
+            ## Actions to take
+
+            - Implement safe improvements directly (style, docstrings, API alignment).
+            - Create missing placeholder examples with clear TODO markers.
+            - Create or update `examples/README.md` as an index.
+            - For larger restructuring changes, open a pull request rather than
+              committing directly.
+            - After all changes, create a GitHub issue titled
+              "Examples Review — <date>" with:
+              * Summary of findings per category
+              * List of changes made (with file:line references)
+              * List of missing examples added as placeholders
+              * Remaining issues that need human attention
+              * Label the issue: `review`, `examples`
+
+  # ──────────────────────────────────────────────
+  # Job 2: GitHub Copilot / gpt-codex-5.3 (optional)
+  # ──────────────────────────────────────────────
+  copilot-examples-review:
+    name: GitHub Copilot (gpt-codex-5.3) — Examples Review
+    if: ${{ inputs.use_copilot }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Review examples with GitHub Copilot (gpt-codex-5.3)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 << 'EOF'
+          import json, os, sys, textwrap, urllib.request, urllib.error
+          from pathlib import Path
+
+          TOKEN  = os.environ["GITHUB_TOKEN"]
+          REPO   = os.environ["REPO"]
+          RUN_ID = os.environ["RUN_ID"]
+          MODEL  = "gpt-codex-5.3"
+          API_URL = "https://models.inference.ai.azure.com/chat/completions"
+
+          # ── Collect a representative sample of examples ──
+          examples_root = Path("examples")
+          CHAR_LIMIT = 12_000  # total budget for example snippets
+
+          sections = []
+          total = 0
+
+          # Walk categories in order; collect the first file from each
+          for category in sorted(examples_root.iterdir()):
+              if not category.is_dir() or category.name.startswith("."):
+                  continue
+              py_files = sorted(category.rglob("*.py"))
+              for py_file in py_files[:1]:  # one file per category to stay within budget
+                  if total >= CHAR_LIMIT:
+                      break
+                  try:
+                      raw = py_file.read_text()
+                      snippet = raw[: 1_500] + ("\n...(truncated)" if len(raw) > 1_500 else "")
+                      sections.append(f"### `{py_file}`\n```python\n{snippet}\n```")
+                      total += len(snippet)
+                  except Exception:
+                      pass
+
+          # Add shared helpers
+          for shared_file in sorted((examples_root / "_shared").glob("*.py")):
+              try:
+                  raw = shared_file.read_text()
+                  snippet = raw[:2_000] + ("\n...(truncated)" if len(raw) > 2_000 else "")
+                  sections.append(f"### `{shared_file}`\n```python\n{snippet}\n```")
+              except Exception:
+                  pass
+
+          # List all example files for the overview
+          all_files = sorted(str(p) for p in examples_root.rglob("*.py"))
+          file_list = "\n".join(f"- `{f}`" for f in all_files)
+
+          context = "\n\n".join(sections)
+
+          user_prompt = textwrap.dedent(f"""
+              You are reviewing the examples directory of the quantum-lego Python library,
+              which provides modular "brick" building blocks for computational chemistry
+              workflows (AiiDA-based, targeting VASP / QE / CP2K).
+
+              ## Full list of example files
+
+              {file_list}
+
+              ## Representative code samples
+
+              {context}
+
+              ## Review tasks
+
+              1. Assess the logical organisation of the 10 numbered categories.
+              2. Identify examples that are unclear, incomplete, or use outdated API calls.
+              3. List important bricks with no example (e.g. Bader, NEB, hybrid bands,
+                 Fukui analysis, formation enthalpy).
+              4. Evaluate `_shared/` utilities for correctness and completeness.
+              5. Recommend whether a top-level `examples/README.md` is needed.
+              6. Suggest concrete improvements with brief code snippets where useful.
+
+              Format your response as a well-structured GitHub issue body (Markdown).
+              Include a summary table per category and a prioritised recommendation list.
+          """).strip()
+
+          payload = json.dumps({
+              "model": MODEL,
+              "messages": [
+                  {
+                      "role": "system",
+                      "content": (
+                          "You are an expert Python developer specialising in quantum chemistry "
+                          "simulation software, AiiDA workflows, and developer experience."
+                      ),
+                  },
+                  {"role": "user", "content": user_prompt},
+              ],
+              "max_tokens": 4096,
+              "temperature": 0.2,
+          }).encode()
+
+          # ── Call GitHub Models API ──
+          try:
+              req = urllib.request.Request(
+                  API_URL,
+                  data=payload,
+                  headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"},
+              )
+              with urllib.request.urlopen(req, timeout=120) as resp:
+                  data = json.loads(resp.read())
+              review_body = data["choices"][0]["message"]["content"]
+          except urllib.error.HTTPError as exc:
+              review_body = (
+                  f"> **GitHub Models API error**: `{exc.code} {exc.reason}`\n\n"
+                  f"The model `{MODEL}` may not be available under your GitHub Copilot subscription "
+                  f"or via GitHub Models. Please verify the model name and your subscription tier.\n\n"
+                  f"Manual review of `examples/` is required."
+              )
+          except Exception as exc:
+              review_body = f"> **Unexpected error**: {exc}\n\nManual review required."
+
+          issue_body = (
+              f"## Examples Review\n\n"
+              f"_Generated by GitHub Copilot model `{MODEL}` — "
+              f"[workflow run](https://github.com/{REPO}/actions/runs/{RUN_ID})_\n\n"
+              f"{review_body}"
+          )
+
+          # ── Create GitHub issue ──
+          issue_payload = json.dumps({
+              "title": "Examples Review — GitHub Copilot (gpt-codex-5.3)",
+              "body": issue_body,
+              "labels": ["review", "examples", "automated"],
+          }).encode()
+
+          issue_req = urllib.request.Request(
+              f"https://api.github.com/repos/{REPO}/issues",
+              data=issue_payload,
+              headers={
+                  "Authorization": f"Bearer {TOKEN}",
+                  "Content-Type": "application/json",
+                  "Accept": "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              },
+          )
+          with urllib.request.urlopen(issue_req) as resp:
+              issue = json.loads(resp.read())
+          print(f"Issue created: {issue['html_url']}")
+          EOF
