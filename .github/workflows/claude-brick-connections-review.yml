@@ -1,0 +1,224 @@
+name: Review Brick Connections
+
+# Analyzes and improves the connections (PORT system) between quantum-lego bricks.
+# Primary engine: Claude Sonnet 4.6 via Claude AI Pro subscription.
+# Alternative engine: GitHub Copilot with gpt-codex-5.3 (opt-in via input).
+
+on:
+  workflow_dispatch:
+    inputs:
+      use_copilot:
+        description: >
+          Use GitHub Copilot (gpt-codex-5.3) instead of Claude Sonnet 4.6.
+          Requires a GitHub Copilot subscription and access to GitHub Models.
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Job 1: Claude Sonnet 4.6 (default)
+  # ──────────────────────────────────────────────
+  claude-connections-review:
+    name: Claude Sonnet 4.6 — Brick Connections Review
+    if: ${{ !inputs.use_copilot }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # Allow Claude to commit improvements
+      pull-requests: write   # Allow Claude to open PRs with changes
+      issues: write          # Allow Claude to create summary issues
+      id-token: write        # Required by claude-code-action
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Review and improve brick connections (Claude Sonnet 4.6)
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: "--model claude-sonnet-4-6"
+          prompt: |
+            You are reviewing the quantum-lego Python library for computational chemistry workflows.
+            Your task is to review and improve the connections between Lego bricks.
+
+            ## Scope
+
+            Focus on these files (read them all before acting):
+            - `quantum_lego/core/bricks/connections.py`  ← primary file (PORT validation system)
+            - `quantum_lego/core/bricks/*.py`             ← all 26 brick implementations
+            - `quantum_lego/core/__init__.py`             ← public API exports
+            - `tests/test_lego_connections.py`            ← connection tests
+            - `docs/BRICK_CONNECTIONS.md`                 ← connection documentation
+
+            ## Review checklist
+
+            1. **PORT validation system** – check correctness and completeness of
+               `connections.py`. Identify any ports that are declared but never validated,
+               or validated inconsistently across bricks.
+
+            2. **Interface consistency** – ensure every brick exposes inputs/outputs with
+               consistent naming conventions, types, and optional/required semantics.
+
+            3. **Missing connections** – identify bricks that should be connectable but
+               lack declared connection paths.
+
+            4. **Type-hint accuracy** – verify that port types in `connections.py` match
+               actual AiiDA Data types used in each brick.
+
+            5. **Test coverage** – check `tests/test_lego_connections.py` and flag any
+               brick connections not covered by tests.
+
+            6. **Documentation accuracy** – check that `docs/BRICK_CONNECTIONS.md`
+               accurately reflects the code. Flag or fix outdated entries.
+
+            ## Actions to take
+
+            - Implement safe, targeted improvements directly (prefer small, focused edits).
+            - If a change is risky or wide-ranging, open a pull request instead of
+              committing directly, so a human can review it.
+            - After all changes, create a GitHub issue titled
+              "Brick Connections Review — <date>" with:
+              * Summary of findings
+              * List of changes made (with file:line references)
+              * List of remaining issues that need human attention
+              * Label the issue: `review`, `brick-connections`
+
+  # ──────────────────────────────────────────────
+  # Job 2: GitHub Copilot / gpt-codex-5.3 (optional)
+  # ──────────────────────────────────────────────
+  copilot-connections-review:
+    name: GitHub Copilot (gpt-codex-5.3) — Brick Connections Review
+    if: ${{ inputs.use_copilot }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Review brick connections with GitHub Copilot (gpt-codex-5.3)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 << 'EOF'
+          import json, os, sys, textwrap, urllib.request, urllib.error
+
+          TOKEN = os.environ["GITHUB_TOKEN"]
+          REPO  = os.environ["REPO"]
+          RUN_ID = os.environ["RUN_ID"]
+          MODEL  = "gpt-codex-5.3"
+          API_URL = "https://models.inference.ai.azure.com/chat/completions"
+
+          # ── Collect relevant file content (truncated to stay within token budget) ──
+          SNIPPETS = [
+              ("quantum_lego/core/bricks/connections.py", 10_000),
+              ("docs/BRICK_CONNECTIONS.md",                6_000),
+              ("quantum_lego/core/__init__.py",            3_000),
+          ]
+
+          sections = []
+          for path, limit in SNIPPETS:
+              try:
+                  with open(path) as f:
+                      raw = f.read()
+                  content = raw[:limit] + ("\n...(truncated)" if len(raw) > limit else "")
+                  sections.append(f"### `{path}`\n```python\n{content}\n```")
+              except FileNotFoundError:
+                  sections.append(f"### `{path}`\n_(file not found)_")
+
+          context = "\n\n".join(sections)
+
+          user_prompt = textwrap.dedent(f"""
+              You are reviewing the quantum-lego Python library for computational chemistry
+              workflows (built on AiiDA). Analyze the connections between Lego bricks.
+
+              ## Files provided
+
+              {context}
+
+              ## Review tasks
+
+              1. Evaluate the PORT validation system in `connections.py`.
+              2. Identify interface inconsistencies across bricks.
+              3. Flag missing or incomplete connection declarations.
+              4. Assess type-hint accuracy for port types.
+              5. Suggest specific, actionable improvements with code examples.
+              6. Note any documentation gaps in `BRICK_CONNECTIONS.md`.
+
+              Format your response as a well-structured GitHub issue body (Markdown).
+              Include a summary table of findings and a prioritized list of recommendations.
+          """).strip()
+
+          payload = json.dumps({
+              "model": MODEL,
+              "messages": [
+                  {
+                      "role": "system",
+                      "content": (
+                          "You are an expert Python developer specialising in quantum chemistry "
+                          "simulation software, AiiDA workflows, and software architecture review."
+                      ),
+                  },
+                  {"role": "user", "content": user_prompt},
+              ],
+              "max_tokens": 4096,
+              "temperature": 0.2,
+          }).encode()
+
+          # ── Call GitHub Models API ──
+          try:
+              req = urllib.request.Request(
+                  API_URL,
+                  data=payload,
+                  headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"},
+              )
+              with urllib.request.urlopen(req, timeout=120) as resp:
+                  data = json.loads(resp.read())
+              review_body = data["choices"][0]["message"]["content"]
+          except urllib.error.HTTPError as exc:
+              review_body = (
+                  f"> **GitHub Models API error**: `{exc.code} {exc.reason}`\n\n"
+                  f"The model `{MODEL}` may not be available under your GitHub Copilot subscription "
+                  f"or via GitHub Models. Please verify the model name and your subscription tier.\n\n"
+                  f"Manual review of `quantum_lego/core/bricks/connections.py` is required."
+              )
+          except Exception as exc:
+              review_body = f"> **Unexpected error**: {exc}\n\nManual review required."
+
+          issue_body = (
+              f"## Brick Connections Review\n\n"
+              f"_Generated by GitHub Copilot model `{MODEL}` — "
+              f"[workflow run](https://github.com/{REPO}/actions/runs/{RUN_ID})_\n\n"
+              f"{review_body}"
+          )
+
+          # ── Create GitHub issue ──
+          issue_payload = json.dumps({
+              "title": "Brick Connections Review — GitHub Copilot (gpt-codex-5.3)",
+              "body": issue_body,
+              "labels": ["review", "brick-connections", "automated"],
+          }).encode()
+
+          issue_req = urllib.request.Request(
+              f"https://api.github.com/repos/{REPO}/issues",
+              data=issue_payload,
+              headers={
+                  "Authorization": f"Bearer {TOKEN}",
+                  "Content-Type": "application/json",
+                  "Accept": "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              },
+          )
+          with urllib.request.urlopen(issue_req) as resp:
+              issue = json.loads(resp.read())
+          print(f"Issue created: {issue['html_url']}")
+          EOF
