@@ -5,6 +5,7 @@ import warnings
 
 from aiida import orm
 from aiida_workgraph import task
+from aiida_workgraph.socket_spec import dynamic
 
 
 @task.calcfunction
@@ -18,12 +19,24 @@ def generate_neb_intermediate_image(
 ) -> orm.StructureData:
     """Generate one NEB intermediate image using MIC displacement + interpolation.
 
+    .. deprecated::
+        Use ``generate_neb_images_all`` instead, which runs the interpolation
+        once and returns all images in a single calcfunction call.
+
     The endpoint displacement is first built using minimum-image displacements to
     avoid long jumps across periodic boundaries. Intermediate images are then
     obtained using ASE's NEB interpolation (IDPP or linear).
     """
     import numpy as np
     from ase.mep import NEB
+
+    warnings.warn(
+        "generate_neb_intermediate_image is deprecated. "
+        "Use generate_neb_images_all instead, which runs the interpolation "
+        "once and returns all images in a single calcfunction call.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     total_images = int(n_images.value)
     idx = int(image_index.value)
@@ -70,6 +83,83 @@ def generate_neb_intermediate_image(
         neb.interpolate(mic=use_mic)
 
     return orm.StructureData(ase=neb.images[idx])
+
+
+def _build_mic_neb_images(initial_structure, final_structure, n_images, method, mic):
+    """Shared MIC displacement + NEB interpolation logic.
+
+    Returns the list of ASE NEB images (including endpoints).
+    """
+    import numpy as np
+    from ase.mep import NEB
+
+    ainit = initial_structure.get_ase()
+    afinal_ref = final_structure.get_ase()
+
+    if len(ainit) != len(afinal_ref):
+        raise ValueError(
+            f"Initial/final atom counts differ: {len(ainit)} != {len(afinal_ref)}"
+        )
+
+    # Build endpoint with MIC-aware per-atom displacements.
+    displacements = []
+    combined = ainit.copy()
+    combined.extend(afinal_ref)
+    for atom_idx in range(len(ainit)):
+        vec = combined.get_distance(
+            atom_idx, atom_idx + len(ainit), vector=True, mic=True
+        )
+        displacements.append(vec.tolist())
+
+    displacements = np.asarray(displacements, dtype=float)
+    ainit.wrap(eps=1e-1)
+    afinal = ainit.copy()
+    afinal.positions += displacements
+
+    images = [ainit.copy() for _ in range(n_images + 1)] + [afinal.copy()]
+    neb = NEB(images)
+    if method == 'idpp':
+        neb.interpolate('idpp', mic=mic)
+    else:
+        neb.interpolate(mic=mic)
+
+    return neb.images
+
+
+@task.calcfunction(outputs=dynamic(orm.StructureData))
+def generate_neb_images_all(
+    initial_structure: orm.StructureData,
+    final_structure: orm.StructureData,
+    n_images: orm.Int,
+    method: orm.Str,
+    mic: orm.Bool,
+) -> dict:
+    """Generate all NEB intermediate images in a single calcfunction.
+
+    Runs MIC displacement + NEB interpolation (IDPP or linear) once and returns
+    all intermediate images as a dict keyed by ``image_01``, ``image_02``, etc.
+
+    This replaces the old pattern of calling ``generate_neb_intermediate_image``
+    N times (once per image), which repeated the full interpolation each time.
+    """
+    total_images = int(n_images.value)
+    interp_method = method.value.strip().lower()
+    use_mic = bool(mic.value)
+
+    if total_images < 1:
+        raise ValueError("n_images must be >= 1")
+    if interp_method not in {'idpp', 'linear'}:
+        raise ValueError("method must be 'idpp' or 'linear'")
+
+    neb_images = _build_mic_neb_images(
+        initial_structure, final_structure, total_images, interp_method, use_mic,
+    )
+
+    # Return intermediate images (skip endpoints at index 0 and -1)
+    result = {}
+    for i in range(1, total_images + 1):
+        result[f'image_{i:02d}'] = orm.StructureData(ase=neb_images[i])
+    return result
 
 
 @task.calcfunction

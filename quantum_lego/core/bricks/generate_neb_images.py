@@ -7,7 +7,7 @@ from aiida import orm
 from aiida.common.links import LinkType
 
 from .connections import GENERATE_NEB_IMAGES_PORTS as PORTS  # noqa: F401
-from ..tasks import generate_neb_intermediate_image, build_neb_images_manifest
+from ..tasks import generate_neb_images_all, build_neb_images_manifest
 
 
 def validate_stage(stage: dict, stage_names: set) -> None:
@@ -82,22 +82,31 @@ def create_stage_tasks(wg, stage, stage_name, context):
     method = stage.get('method', 'idpp').lower()
     mic = bool(stage.get('mic', True))
 
-    image_tasks = {}
+    # Single calcfunction generates all images at once
+    all_images_task = wg.add_task(
+        generate_neb_images_all,
+        name=f'neb_images_all_{stage_name}',
+        initial_structure=initial_structure,
+        final_structure=final_structure,
+        n_images=orm.Int(n_images),
+        method=orm.Str(method),
+        mic=orm.Bool(mic),
+    )
+
+    # Build image sockets from the single task's outputs
+    image_sockets = {}
     manifest_kwargs = {}
     for i in range(1, n_images + 1):
         label = f'image_{i:02d}'
-        image_task = wg.add_task(
-            generate_neb_intermediate_image,
-            name=f'neb_image_{i:02d}_{stage_name}',
-            initial_structure=initial_structure,
-            final_structure=final_structure,
-            n_images=orm.Int(n_images),
-            image_index=orm.Int(i),
-            method=orm.Str(method),
-            mic=orm.Bool(mic),
-        )
-        image_tasks[label] = image_task
-        manifest_kwargs[label] = image_task.outputs.result
+        # `generate_neb_images_all` returns dynamic outputs; pre-create sockets so we
+        # can link them downstream during graph construction.
+        if label not in all_images_task.outputs:
+            # Must modify the *spec* (not just runtime sockets), otherwise link
+            # restoration inside WorkGraphEngine will fail.
+            all_images_task.add_output_spec('workgraph.aiida_structuredata', label)
+        socket = getattr(all_images_task.outputs, label)
+        image_sockets[label] = socket
+        manifest_kwargs[label] = socket
 
     manifest_task = wg.add_task(
         build_neb_images_manifest,
@@ -106,8 +115,9 @@ def create_stage_tasks(wg, stage, stage_name, context):
     )
 
     return {
-        'images': image_tasks,
+        'images': image_sockets,
         'manifest': manifest_task,
+        'all_images_task': all_images_task,
         'initial_structure': initial_structure,
         'final_structure': final_structure,
     }
@@ -116,7 +126,8 @@ def create_stage_tasks(wg, stage, stage_name, context):
 def expose_stage_outputs(wg, stage_name, stage_tasks_result, namespace_map=None):
     """Expose generate_neb_images outputs on the WorkGraph."""
     manifest_task = stage_tasks_result['manifest']
-    image_tasks = stage_tasks_result['images']
+    all_images_task = stage_tasks_result['all_images_task']
+    image_sockets = stage_tasks_result['images']
 
     if namespace_map is not None:
         ns = namespace_map['main']
@@ -125,19 +136,19 @@ def expose_stage_outputs(wg, stage_name, stage_tasks_result, namespace_map=None)
             f'{ns}.generate_neb_images.images',
             manifest_task.outputs.result,
         )
-        for label in sorted(image_tasks.keys()):
+        for label in sorted(image_sockets.keys()):
             setattr(
                 wg.outputs,
                 f'{ns}.generate_neb_images.{label}',
-                image_tasks[label].outputs.result,
+                image_sockets[label],
             )
     else:
         setattr(wg.outputs, f'{stage_name}_images', manifest_task.outputs.result)
-        for label in sorted(image_tasks.keys()):
+        for label in sorted(image_sockets.keys()):
             setattr(
                 wg.outputs,
                 f'{stage_name}_{label}',
-                image_tasks[label].outputs.result,
+                image_sockets[label],
             )
 
 
@@ -194,7 +205,7 @@ def _extract_stage_from_workgraph(wg_node, stage_name: str, result: dict) -> Non
         return
 
     manifest_task_name = f'neb_images_manifest_{stage_name}'
-    image_task_suffix = f'_{stage_name}'
+    all_images_task_name = f'neb_images_all_{stage_name}'
 
     called_calc = wg_node.base.links.get_outgoing(link_type=LinkType.CALL_CALC)
     for link in called_calc.all():
@@ -207,16 +218,29 @@ def _extract_stage_from_workgraph(wg_node, stage_name: str, result: dict) -> Non
                 if out_link.link_label == 'result' and hasattr(out_link.node, 'get_dict'):
                     result['images'] = out_link.node.get_dict()
 
-        if 'neb_image_' in link_label and link_label.endswith(image_task_suffix):
-            parts = link_label.split('_')
-            image_idx = parts[2] if len(parts) >= 4 else None
-            if image_idx is None:
-                continue
-            image_label = f'image_{image_idx}'
+        if all_images_task_name in link_label or link_label == all_images_task_name:
             created = child_node.base.links.get_outgoing(link_type=LinkType.CREATE)
             for out_link in created.all():
-                if out_link.link_label == 'result':
-                    result['image_structures'][image_label] = out_link.node
+                if out_link.link_label.startswith('image_'):
+                    result['image_structures'][out_link.link_label] = out_link.node
+
+    # Fallback: also handle legacy per-image calcfunction nodes
+    if not result['image_structures']:
+        image_task_suffix = f'_{stage_name}'
+        for link in called_calc.all():
+            child_node = link.node
+            link_label = link.link_label
+
+            if 'neb_image_' in link_label and link_label.endswith(image_task_suffix):
+                parts = link_label.split('_')
+                image_idx = parts[2] if len(parts) >= 4 else None
+                if image_idx is None:
+                    continue
+                image_label = f'image_{image_idx}'
+                created = child_node.base.links.get_outgoing(link_type=LinkType.CREATE)
+                for out_link in created.all():
+                    if out_link.link_label == 'result':
+                        result['image_structures'][image_label] = out_link.node
 
 
 def print_stage_results(index: int, stage_name: str, stage_result: dict) -> None:

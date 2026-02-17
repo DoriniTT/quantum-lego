@@ -161,6 +161,11 @@ def create_stage_tasks(
             'dos_kpoints_distance': 0.03,
         })
     else:
+        # Important: since we always pass the `dos` namespace, aiida-vasp will
+        # only use `band_settings['dos_kpoints_distance']` for k-point generation
+        # if the `dos` namespace is *not* provided. So we explicitly set
+        # `dos.kpoints_spacing` here.
+        dos_input['kpoints_spacing'] = float(dos_kpoints_spacing)
         band_settings = orm.Dict({
             'only_dos': True,
             'run_dos': True,
