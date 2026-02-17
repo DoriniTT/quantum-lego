@@ -14,6 +14,7 @@ no AiiDA dependency) so they can be imported in tier1 tests.
 
 from . import (
     vasp,
+    dimer,
     dos,
     hybrid_bands,
     batch,
@@ -49,6 +50,7 @@ from .connections import (  # noqa: F401
 
 BRICK_REGISTRY = {
     'vasp': vasp,
+    'dimer': dimer,
     'dos': dos,
     'hybrid_bands': hybrid_bands,
     'batch': batch,
@@ -101,7 +103,7 @@ def get_brick_module(brick_type: str):
 def resolve_structure_from(structure_from: str, context: dict):
     """Resolve a structure socket from a previous stage.
 
-    Only VASP, AIMD, QE, CP2K, NEB, and o2_reference_energy stages produce a meaningful
+    Only VASP, DIMER, AIMD, QE, CP2K, NEB, and o2_reference_energy stages produce a meaningful
     structure output.
     Referencing a non-VASP/AIMD/QE/CP2K stage (dos, batch, bader, convergence,
     thickness, hubbard_response, hubbard_analysis) raises an error
@@ -130,7 +132,7 @@ def resolve_structure_from(structure_from: str, context: dict):
     stage_types = context['stage_types']
 
     ref_stage_type = stage_types.get(structure_from, 'vasp')
-    if ref_stage_type in ('vasp', 'aimd'):
+    if ref_stage_type in ('vasp', 'dimer', 'aimd'):
         return stage_tasks[structure_from]['vasp'].outputs.structure
     elif ref_stage_type == 'qe':
         return stage_tasks[structure_from]['qe'].outputs.output_structure
@@ -153,7 +155,7 @@ def resolve_structure_from(structure_from: str, context: dict):
 def resolve_energy_from(energy_from: str, context: dict):
     """Resolve an energy socket from a previous stage.
 
-    Only VASP, AIMD, CP2K, and o2_reference_energy stages produce a meaningful energy output.
+    Only VASP, DIMER, AIMD, CP2K, and o2_reference_energy stages produce a meaningful energy output.
     Referencing a non-VASP/AIMD stage raises an error.
 
     Args:
@@ -170,7 +172,7 @@ def resolve_energy_from(energy_from: str, context: dict):
     stage_types = context['stage_types']
 
     ref_stage_type = stage_types.get(energy_from, 'vasp')
-    if ref_stage_type in ('vasp', 'aimd', 'cp2k', 'o2_reference_energy'):
+    if ref_stage_type in ('vasp', 'dimer', 'aimd', 'cp2k', 'o2_reference_energy'):
         return stage_tasks[energy_from]['energy'].outputs.result
     else:
         raise ValueError(

@@ -8,6 +8,7 @@ This module provides a simple API for exploratory computational work:
 
 Stage types are implemented as "bricks" (see bricks/ subdirectory):
 - vasp: Standard VASP calculations (relaxation, SCF, etc.)
+- dimer: Improved dimer method (IBRION=44) with axis parsed from a vibrational OUTCAR
 - dos: DOS calculations via BandsWorkChain
 - batch: Multiple parallel VASP calculations with varying parameters
 - bader: Bader charge analysis

@@ -13,6 +13,7 @@ from ..retrieve_defaults import build_vasp_retrieve
 
 _VASP_RETRIEVE_STAGE_TYPES = {
     'vasp',
+    'dimer',
     'batch',
     'aimd',
     'neb',
@@ -89,6 +90,59 @@ VASP_PORTS = {
         'retrieved': {
             'type': 'retrieved',
             'description': 'Retrieved files from cluster',
+        },
+    },
+}
+
+DIMER_PORTS = {
+    'inputs': {
+        'structure': {
+            'type': 'structure',
+            'required': True,
+            'source': 'auto',
+            'description': 'Atomic structure',
+        },
+        'vibrational_retrieved': {
+            'type': 'retrieved',
+            'required': True,
+            'source': 'vibrational_from',
+            'compatible_bricks': ['vasp'],
+            'prerequisites': {
+                # Needed to print eigenvectors after division by SQRT(mass)
+                'incar': {'ibrion': 5, 'nwrite': 3},
+                'retrieve': ['OUTCAR'],
+            },
+            'description': 'Vibrational analysis retrieved files (OUTCAR eigenvectors)',
+        },
+        'restart_folder': {
+            'type': 'remote_folder',
+            'required': False,
+            'source': 'restart',
+            'compatible_bricks': ['vasp', 'dimer'],
+            'description': 'Remote folder for WAVECAR/CHGCAR restart',
+        },
+    },
+    'outputs': {
+        'structure': {
+            'type': 'structure',
+            'conditional': {'incar_key': 'nsw', 'operator': '>', 'value': 0},
+            'description': 'Relaxed structure (only meaningful if nsw > 0)',
+        },
+        'energy': {
+            'type': 'energy',
+            'description': 'Total energy (eV)',
+        },
+        'misc': {
+            'type': 'misc',
+            'description': 'Parsed VASP results dict',
+        },
+        'remote_folder': {
+            'type': 'remote_folder',
+            'description': 'Remote calculation directory',
+        },
+        'retrieved': {
+            'type': 'retrieved',
+            'description': 'Retrieved files from cluster (includes POSCAR with dimer axis)',
         },
     },
 }
@@ -831,6 +885,7 @@ HYBRID_BANDS_PORTS = {
 # Registry mapping brick type name -> PORTS dict
 ALL_PORTS = {
     'vasp': VASP_PORTS,
+    'dimer': DIMER_PORTS,
     'dos': DOS_PORTS,
     'hybrid_bands': HYBRID_BANDS_PORTS,
     'batch': BATCH_PORTS,

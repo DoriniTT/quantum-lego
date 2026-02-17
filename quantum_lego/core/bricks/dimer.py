@@ -1,37 +1,198 @@
-"""VASP brick for the lego module.
+"""Dimer brick for the lego module.
 
-Handles standard VASP calculation stages: relaxation, SCF, etc.
+Implements the VASP Improved Dimer Method (IDM) transition-state refinement:
+
+1) Run a vibrational analysis (IBRION=5, NWRITE=3) in a prior VASP stage
+2) Extract the hardest imaginary mode eigenvectors (dx, dy, dz columns) from OUTCAR
+3) Append the 3N-vector (one line per atom) to POSCAR via scheduler prepend_text
+4) Run VASP with IBRION=44
+
+Reference: https://vasp.at/wiki/Improved_dimer_method
 """
 
-from typing import Dict, Set, Any
+from __future__ import annotations
+
+import re
+from typing import Any, Dict, Set
 
 from aiida import orm
 from aiida.common.links import LinkType
 from aiida.plugins import WorkflowFactory
-from aiida_workgraph import task, WorkGraph
+from aiida_workgraph import WorkGraph, task
 
-from .connections import VASP_PORTS as PORTS  # noqa: F401
+from .connections import DIMER_PORTS as PORTS  # noqa: F401
 from ..common.utils import extract_total_energy
 from ..tasks import compute_dynamics
 from ..types import StageContext, StageTasksResult, VaspResults
 
 
-def validate_stage(stage: Dict[str, Any], stage_names: Set[str]) -> None:
-    """Validate a VASP stage configuration.
+_MODE_HEADER_RE = re.compile(
+    r'^\s*(\d+)\s+f/i=\s*'
+    r'([+-]?\d+(?:\.\d+)?(?:[Ee][+-]?\d+)?)\s*THz.*?'
+    r'([+-]?\d+(?:\.\d+)?(?:[Ee][+-]?\d+)?)\s*cm-1',
+    re.IGNORECASE,
+)
+_EIGENVECTOR_HEADER_RE = re.compile(r'^\s*X\s+Y\s+Z\s+dx\s+dy\s+dz\s*$', re.IGNORECASE)
 
-    Args:
-        stage: Stage configuration dict.
-        stage_names: Set of stage names defined so far (before this stage).
 
-    Raises:
-        ValueError: If validation fails.
+def _parse_hardest_imaginary_mode(outcar_content: str, n_atoms: int) -> dict:
+    """Parse OUTCAR and return the hardest imaginary mode eigenvectors.
+
+    Returns a dict:
+        {
+            'mode_index': int,
+            'frequency_thz': float,
+            'frequency_cm-1': float,
+            'axis': [(dx, dy, dz), ...]  # len == n_atoms, strings (verbatim tokens)
+        }
     """
+    if n_atoms < 1:
+        raise ValueError(f"Invalid atom count for dimer axis extraction: n_atoms={n_atoms}")
+
+    marker = 'Eigenvectors after division by SQRT(mass)'
+    lower = outcar_content.lower()
+    start = lower.rfind(marker.lower())
+    if start == -1:
+        raise ValueError(
+            "Could not find 'Eigenvectors after division by SQRT(mass)' in OUTCAR. "
+            "Ensure the vibrational calculation used NWRITE=3."
+        )
+
+    lines = outcar_content[start:].splitlines()
+    modes: list[dict] = []
+
+    for i, line in enumerate(lines):
+        match = _MODE_HEADER_RE.match(line)
+        if match is None:
+            continue
+
+        mode_index = int(match.group(1))
+        freq_thz = float(match.group(2))
+        freq_cm1 = float(match.group(3))
+
+        # Find the "X Y Z dx dy dz" header, then read n_atoms lines below.
+        j = i + 1
+        while j < len(lines) and _EIGENVECTOR_HEADER_RE.match(lines[j]) is None:
+            j += 1
+        if j >= len(lines):
+            continue
+
+        axis: list[tuple[str, str, str]] = []
+        for k in range(n_atoms):
+            idx = j + 1 + k
+            if idx >= len(lines):
+                break
+            data = lines[idx].strip()
+            if not data:
+                break
+            toks = data.split()
+            if len(toks) < 6:
+                break
+
+            dx, dy, dz = toks[3], toks[4], toks[5]
+            try:
+                float(dx)
+                float(dy)
+                float(dz)
+            except ValueError:
+                break
+            axis.append((dx, dy, dz))
+
+        if len(axis) == n_atoms:
+            modes.append(
+                {
+                    'mode_index': mode_index,
+                    'frequency_thz': freq_thz,
+                    'frequency_cm-1': freq_cm1,
+                    'axis': axis,
+                }
+            )
+
+    if not modes:
+        raise ValueError(
+            "Could not parse any imaginary modes (f/i=) with a complete 3N eigenvector "
+            f"table in OUTCAR (expected {n_atoms} atoms). Ensure the vibrational stage ran "
+            "with IBRION=5 and NWRITE=3, and that OUTCAR was retrieved."
+        )
+
+    # Hardest imaginary mode: largest magnitude in cm-1 (translational modes are small).
+    return max(modes, key=lambda item: abs(item['frequency_cm-1']))
+
+
+@task.calcfunction
+def inject_dimer_axis_prepend_text(
+    options: orm.Dict,
+    retrieved: orm.FolderData,
+    structure: orm.StructureData,
+    poscar_filename: orm.Str | None = None,
+) -> orm.Dict:
+    """Return options dict with prepend_text that appends dimer axis to POSCAR."""
+    opts = dict(options.get_dict() or {})
+    filename = poscar_filename.value if poscar_filename is not None else 'POSCAR'
+
+    try:
+        content = retrieved.get_object_content('OUTCAR')
+    except Exception as exc:  # pragma: no cover (AiiDA internals)
+        raise ValueError(
+            "OUTCAR not found in vibrational stage retrieved folder. "
+            "Ensure the vibrational stage retrieves OUTCAR."
+        ) from exc
+
+    outcar_text = content.decode(errors='replace') if isinstance(content, bytes) else str(content)
+    mode = _parse_hardest_imaginary_mode(outcar_text, n_atoms=len(structure.sites))
+
+    # Append exactly N lines (no comment lines) after a separating blank line.
+    commands = [f'echo \"\" >> {filename}']
+    for dx, dy, dz in mode['axis']:
+        commands.append(f'echo \"{dx} {dy} {dz}\" >> {filename}')
+
+    block = '\n'.join(commands)
+    existing = opts.get('prepend_text')
+    if existing:
+        if block not in existing:
+            opts['prepend_text'] = f'{existing.rstrip()}\n{block}'
+    else:
+        opts['prepend_text'] = block
+
+    return orm.Dict(dict=opts)
+
+
+def validate_stage(stage: Dict[str, Any], stage_names: Set[str]) -> None:
+    """Validate a dimer stage configuration."""
     name = stage['name']
 
     if 'incar' not in stage:
         raise ValueError(f"Stage '{name}' missing required 'incar' field")
 
-    # Require restart or restart_from (mutually exclusive)
+    if 'vibrational_from' not in stage:
+        raise ValueError(
+            f"Stage '{name}': dimer stages require 'vibrational_from' "
+            f"(name of the vibrational analysis VASP stage)"
+        )
+
+    vibrational_from = stage['vibrational_from']
+    if not isinstance(vibrational_from, str) or not vibrational_from:
+        raise ValueError(
+            f"Stage '{name}': vibrational_from must be a non-empty stage name string"
+        )
+    if vibrational_from == name:
+        raise ValueError(f"Stage '{name}': vibrational_from cannot reference itself")
+    if vibrational_from not in stage_names:
+        raise ValueError(
+            f"Stage '{name}': vibrational_from='{vibrational_from}' must reference "
+            f"a previous stage name"
+        )
+
+    incar = stage['incar']
+    ibrion_key = next((k for k in incar.keys() if str(k).lower() == 'ibrion'), None)
+    if ibrion_key is None:
+        raise ValueError(f"Stage '{name}': dimer requires INCAR IBRION=44")
+    if int(incar.get(ibrion_key)) != 44:
+        raise ValueError(
+            f"Stage '{name}': dimer requires INCAR IBRION=44, got {ibrion_key}={incar.get(ibrion_key)!r}"
+        )
+
+    # Require restart or restart_from (mutually exclusive) — consistent with vasp brick.
     restart = stage.get('restart')
     restart_from = stage.get('restart_from')
 
@@ -39,26 +200,22 @@ def validate_stage(stage: Dict[str, Any], stage_names: Set[str]) -> None:
         raise ValueError(
             f"Stage '{name}': cannot use both 'restart' and 'restart_from'"
         )
-
     if 'restart' not in stage and 'restart_from' not in stage:
         raise ValueError(
             f"Stage '{name}' missing 'restart' or 'restart_from' field "
             f"(use restart=None, restart='stage_name', or restart_from=PK)"
         )
-
-    if restart is not None:
-        if restart not in stage_names:
-            raise ValueError(
-                f"Stage '{name}' restart='{restart}' references unknown or "
-                f"later stage (must be defined before this stage)"
-            )
-
+    if restart is not None and restart not in stage_names:
+        raise ValueError(
+            f"Stage '{name}' restart='{restart}' references unknown or "
+            f"later stage (must be defined before this stage)"
+        )
     if restart_from is not None and not isinstance(restart_from, int):
         raise ValueError(
             f"Stage '{name}': restart_from must be an int PK, got {type(restart_from).__name__}"
         )
 
-    # Validate structure_from for VASP stages (skip if explicit structure provided)
+    # Validate structure_from (skip if explicit structure provided)
     if 'structure' not in stage:
         structure_from = stage.get('structure_from', 'previous')
         if structure_from not in ('previous', 'input') and structure_from not in stage_names:
@@ -89,8 +246,6 @@ def validate_stage(stage: Dict[str, Any], stage_names: Set[str]) -> None:
             raise ValueError(
                 f"Stage '{name}' fix_type='{fix_type}' must be one of {valid_fix_types}"
             )
-
-        # If fix_type is set, fix_thickness must be positive
         fix_thickness = stage.get('fix_thickness', 0.0)
         if fix_thickness <= 0.0:
             raise ValueError(
@@ -103,26 +258,16 @@ def create_stage_tasks(
     wg: WorkGraph,
     stage: Dict[str, Any],
     stage_name: str,
-    context: StageContext
+    context: StageContext,
 ) -> StageTasksResult:
-    """Create VASP stage tasks in the WorkGraph.
-
-    Args:
-        wg: WorkGraph to add tasks to.
-        stage: Stage configuration dict.
-        stage_name: Unique stage identifier.
-        context: Dict with shared context (code, options, stage_tasks, etc.).
-
-    Returns:
-        Dict with task references for later stages.
-    """
+    """Create dimer stage tasks in the WorkGraph."""
     from quantum_lego.core.common.aimd.tasks import create_supercell
     from ..workgraph import _prepare_builder_inputs
 
     code = context['code']
     potential_family = context['potential_family']
     potential_mapping = context['potential_mapping']
-    options = context['options']
+    base_options = context['options']
     kpoints_spacing = context['base_kpoints_spacing']
     clean_workdir = context['clean_workdir']
     stage_tasks = context['stage_tasks']
@@ -134,18 +279,15 @@ def create_stage_tasks(
     VaspWorkChain = WorkflowFactory('vasp.v2.vasp')
     VaspTask = task(VaspWorkChain)
 
-    # Determine structure source
+    # Determine structure source (same behavior as vasp brick)
     if 'structure' in stage:
-        # Explicit structure provided in stage config
         explicit = stage['structure']
         stage_structure = orm.load_node(explicit) if isinstance(explicit, int) else explicit
     elif i == 0:
-        # First stage always uses input structure
         stage_structure = input_structure
     elif stage.get('structure_from', 'previous') == 'input':
         stage_structure = input_structure
     elif stage.get('structure_from', 'previous') == 'previous':
-        # Use output structure from previous stage
         prev_name = stage_names[i - 1]
         prev_stage_type = stage_types[prev_name]
         if prev_stage_type in ('dos', 'batch', 'bader'):
@@ -162,7 +304,6 @@ def create_stage_tasks(
                 f"'structure_from' pointing to a VASP, AIMD, or NEB stage."
             )
     else:
-        # Use output structure from specific stage
         from . import resolve_structure_from
         structure_from = stage.get('structure_from', 'previous')
         stage_structure = resolve_structure_from(structure_from, context)
@@ -175,7 +316,7 @@ def create_stage_tasks(
             create_supercell,
             name=f'supercell_{stage_name}',
             structure=stage_structure,
-            spec=orm.List(list=supercell_spec),
+            spec=orm.List(list=list(supercell_spec)),
         )
         stage_structure = supercell_task.outputs.result
 
@@ -185,6 +326,11 @@ def create_stage_tasks(
     restart_folder = None
 
     if restart is not None:
+        ref_type = stage_types.get(restart, 'vasp')
+        if ref_type not in ('vasp', 'dimer'):
+            raise ValueError(
+                f"Stage '{stage_name}': restart='{restart}' must point to a vasp/dimer stage, got '{ref_type}'"
+            )
         restart_folder = stage_tasks[restart]['vasp'].outputs.remote_folder
     elif restart_from is not None:
         from ..utils import prepare_restart_settings
@@ -197,32 +343,30 @@ def create_stage_tasks(
         if restart_settings['incar_additions']:
             from ..common.utils import deep_merge_dicts
             stage['incar'] = deep_merge_dicts(stage['incar'], restart_settings['incar_additions'])
-        # Use restart structure if no explicit structure source
         if i == 0 and 'structure' not in stage and stage.get('structure_from') is None:
             stage_structure = restart_structure
 
-    # Prepare builder inputs for this stage
+    # Prepare builder inputs
     stage_incar = stage['incar']
     stage_kpoints_spacing = stage.get('kpoints_spacing', kpoints_spacing)
     stage_kpoints_mesh = stage.get('kpoints', None)
     stage_retrieve = stage.get('retrieve', None)
+    raw_stage_options = stage.get('options', base_options)
+    stage_options = raw_stage_options.get_dict() if isinstance(raw_stage_options, orm.Dict) else raw_stage_options
 
-    # Get fix parameters for this stage
     stage_fix_type = stage.get('fix_type', None)
     stage_fix_thickness = stage.get('fix_thickness', 0.0)
     stage_fix_elements = stage.get('fix_elements', None)
 
-    # Determine if we can compute dynamics at build time
     is_structure_socket = not isinstance(stage_structure, orm.StructureData)
 
-    # Prepare builder inputs
     if stage_fix_type is not None and not is_structure_socket:
         builder_inputs = _prepare_builder_inputs(
             incar=stage_incar,
             kpoints_spacing=stage_kpoints_spacing,
             potential_family=potential_family,
             potential_mapping=potential_mapping,
-            options=options,
+            options=stage_options,
             retrieve=stage_retrieve,
             restart_folder=None,
             clean_workdir=clean_workdir,
@@ -238,7 +382,7 @@ def create_stage_tasks(
             kpoints_spacing=stage_kpoints_spacing,
             potential_family=potential_family,
             potential_mapping=potential_mapping,
-            options=options,
+            options=stage_options,
             retrieve=stage_retrieve,
             restart_folder=None,
             clean_workdir=clean_workdir,
@@ -257,33 +401,44 @@ def create_stage_tasks(
             fix_elements=orm.List(list=stage_fix_elements) if stage_fix_elements else None,
         )
 
-    # Add VASP task
+    # Build runtime options with dimer axis injection
+    vibrational_from = stage['vibrational_from']
+    vib_type = stage_types.get(vibrational_from, 'vasp')
+    if vib_type != 'vasp':
+        raise ValueError(
+            f"Stage '{stage_name}': vibrational_from='{vibrational_from}' must point to a VASP stage, got '{vib_type}'"
+        )
+    vib_retrieved = stage_tasks[vibrational_from]['vasp'].outputs.retrieved
+    base_options_node = raw_stage_options if isinstance(raw_stage_options, orm.Dict) else orm.Dict(dict=stage_options)
+    injected_options = wg.add_task(
+        inject_dimer_axis_prepend_text,
+        name=f'dimer_options_{stage_name}',
+        options=base_options_node,
+        retrieved=vib_retrieved,
+        structure=stage_structure,
+    )
+    builder_inputs['options'] = injected_options.outputs.result
+
+    # Add VASP task (same naming convention as vasp brick)
     vasp_task_kwargs = {
         'name': f'vasp_{stage_name}',
         'structure': stage_structure,
         'code': code,
-        **builder_inputs
+        **builder_inputs,
     }
 
-    # Add restart if available
     if restart_folder is not None:
         vasp_task_kwargs['restart'] = {'folder': restart_folder}
 
-    # Add dynamics from calcfunction if computed at runtime
     if dynamics_task is not None:
         vasp_task_kwargs['dynamics'] = dynamics_task.outputs.result
 
-    # Explicit dynamics override (for frequency calculations etc.)
     if 'dynamics' in stage and dynamics_task is None and 'dynamics' not in vasp_task_kwargs:
         dyn = stage['dynamics']
-        if isinstance(dyn, orm.Dict):
-            vasp_task_kwargs['dynamics'] = dyn
-        else:
-            vasp_task_kwargs['dynamics'] = orm.Dict(dict=dyn)
+        vasp_task_kwargs['dynamics'] = dyn if isinstance(dyn, orm.Dict) else orm.Dict(dict=dyn)
 
     vasp_task = wg.add_task(VaspTask, **vasp_task_kwargs)
 
-    # Add energy extraction task
     energy_task = wg.add_task(
         extract_total_energy,
         name=f'energy_{stage_name}',
@@ -296,6 +451,7 @@ def create_stage_tasks(
         'energy': energy_task,
         'supercell': supercell_task,
         'input_structure': stage_structure,
+        'injected_options': injected_options,
     }
 
 
@@ -303,28 +459,19 @@ def expose_stage_outputs(
     wg: WorkGraph,
     stage_name: str,
     stage_tasks_result: StageTasksResult,
-    namespace_map: Dict[str, str] = None
+    namespace_map: Dict[str, str] | None = None,
 ) -> None:
-    """Expose VASP stage outputs on the WorkGraph.
-
-    Args:
-        wg: WorkGraph instance.
-        stage_name: Unique stage identifier.
-        stage_tasks_result: Dict returned by create_stage_tasks.
-        namespace_map: Dict mapping output group to namespace string,
-                      e.g. {'main': 'stage1'}. If None, falls back to
-                      flat naming with stage_name prefix.
-    """
+    """Expose dimer stage outputs on the WorkGraph."""
     vasp_task = stage_tasks_result['vasp']
     energy_task = stage_tasks_result['energy']
 
     if namespace_map is not None:
         ns = namespace_map['main']
-        setattr(wg.outputs, f'{ns}.vasp.energy', energy_task.outputs.result)
-        setattr(wg.outputs, f'{ns}.vasp.structure', vasp_task.outputs.structure)
-        setattr(wg.outputs, f'{ns}.vasp.misc', vasp_task.outputs.misc)
-        setattr(wg.outputs, f'{ns}.vasp.remote', vasp_task.outputs.remote_folder)
-        setattr(wg.outputs, f'{ns}.vasp.retrieved', vasp_task.outputs.retrieved)
+        setattr(wg.outputs, f'{ns}.dimer.energy', energy_task.outputs.result)
+        setattr(wg.outputs, f'{ns}.dimer.structure', vasp_task.outputs.structure)
+        setattr(wg.outputs, f'{ns}.dimer.misc', vasp_task.outputs.misc)
+        setattr(wg.outputs, f'{ns}.dimer.remote', vasp_task.outputs.remote_folder)
+        setattr(wg.outputs, f'{ns}.dimer.retrieved', vasp_task.outputs.retrieved)
     else:
         setattr(wg.outputs, f'{stage_name}_energy', energy_task.outputs.result)
         setattr(wg.outputs, f'{stage_name}_structure', vasp_task.outputs.structure)
@@ -337,23 +484,12 @@ def get_stage_results(
     wg_node: Any,
     wg_pk: int,
     stage_name: str,
-    namespace_map: Dict[str, str] = None
+    namespace_map: Dict[str, str] | None = None,
 ) -> VaspResults:
-    """Extract results from a VASP stage in a sequential workflow.
-
-    Args:
-        wg_node: The WorkGraph ProcessNode.
-        wg_pk: WorkGraph PK.
-        stage_name: Name of the VASP stage.
-        namespace_map: Dict mapping output group to namespace string,
-                      e.g. {'main': 'stage1'}. If None, uses flat naming.
-
-    Returns:
-        Dict with keys: energy, structure, misc, remote, files, pk, stage, type.
-    """
+    """Extract results from a dimer stage in a sequential workflow."""
     from ..results import _extract_energy_from_misc
 
-    result = {
+    result: dict[str, Any] = {
         'energy': None,
         'structure': None,
         'misc': None,
@@ -361,25 +497,20 @@ def get_stage_results(
         'files': None,
         'pk': wg_pk,
         'stage': stage_name,
-        'type': 'vasp',
+        'type': 'dimer',
     }
 
-    # Try to access via WorkGraph outputs (exposed outputs)
     if hasattr(wg_node, 'outputs'):
         outputs = wg_node.outputs
 
         if namespace_map is not None:
-            # Namespaced outputs: access via stage_ns.vasp.output
             ns = namespace_map['main']
             stage_ns = getattr(outputs, ns, None)
-            brick_ns = getattr(stage_ns, 'vasp', None) if stage_ns is not None else None
+            brick_ns = getattr(stage_ns, 'dimer', None) if stage_ns is not None else None
             if brick_ns is not None:
                 if hasattr(brick_ns, 'energy'):
                     energy_node = brick_ns.energy
-                    if hasattr(energy_node, 'value'):
-                        result['energy'] = energy_node.value
-                    else:
-                        result['energy'] = float(energy_node)
+                    result['energy'] = energy_node.value if hasattr(energy_node, 'value') else float(energy_node)
                 if hasattr(brick_ns, 'structure'):
                     result['structure'] = brick_ns.structure
                 if hasattr(brick_ns, 'misc'):
@@ -391,68 +522,50 @@ def get_stage_results(
                 if hasattr(brick_ns, 'retrieved'):
                     result['files'] = brick_ns.retrieved
         else:
-            # Flat naming fallback
-            # Energy
             energy_attr = f'{stage_name}_energy'
             if hasattr(outputs, energy_attr):
                 energy_node = getattr(outputs, energy_attr)
-                if hasattr(energy_node, 'value'):
-                    result['energy'] = energy_node.value
-                else:
-                    result['energy'] = float(energy_node)
+                result['energy'] = energy_node.value if hasattr(energy_node, 'value') else float(energy_node)
 
-            # Structure
             struct_attr = f'{stage_name}_structure'
             if hasattr(outputs, struct_attr):
                 result['structure'] = getattr(outputs, struct_attr)
 
-            # Misc
             misc_attr = f'{stage_name}_misc'
             if hasattr(outputs, misc_attr):
                 misc_node = getattr(outputs, misc_attr)
                 if hasattr(misc_node, 'get_dict'):
                     result['misc'] = misc_node.get_dict()
 
-            # Remote folder
             remote_attr = f'{stage_name}_remote'
             if hasattr(outputs, remote_attr):
                 result['remote'] = getattr(outputs, remote_attr)
 
-            # Retrieved files
             retrieved_attr = f'{stage_name}_retrieved'
             if hasattr(outputs, retrieved_attr):
                 result['files'] = getattr(outputs, retrieved_attr)
 
-    # Fallback: Traverse links to find VaspWorkChain outputs (for stored nodes)
     if result['energy'] is None or result['misc'] is None:
         _extract_sequential_stage_from_workgraph(wg_node, stage_name, result)
 
-    # Extract energy from misc if not found directly
     if result['energy'] is None and result['misc'] is not None:
         result['energy'] = _extract_energy_from_misc(result['misc'])
 
-    return result
+    return result  # type: ignore[return-value]
 
 
 def _extract_sequential_stage_from_workgraph(
     wg_node: Any,
     stage_name: str,
-    result: Dict[str, Any]
+    result: Dict[str, Any],
 ) -> None:
-    """Extract stage results by traversing WorkGraph links.
-
-    Args:
-        wg_node: The WorkGraph node.
-        stage_name: Name of the stage to extract.
-        result: Result dict to populate (modified in place).
-    """
+    """Fallback: extract stage results by traversing WorkGraph links."""
     if not hasattr(wg_node, 'base'):
         return
 
     vasp_task_name = f'vasp_{stage_name}'
     energy_task_name = f'energy_{stage_name}'
 
-    # Traverse CALL_WORK links to find VaspWorkChain
     called = wg_node.base.links.get_outgoing(link_type=LinkType.CALL_WORK)
     for link in called.all():
         child_node = link.node
@@ -461,22 +574,17 @@ def _extract_sequential_stage_from_workgraph(
         if vasp_task_name in link_label or link_label == vasp_task_name:
             if hasattr(child_node, 'outputs'):
                 outputs = child_node.outputs
-
                 if result['misc'] is None and hasattr(outputs, 'misc'):
                     misc = outputs.misc
                     if hasattr(misc, 'get_dict'):
                         result['misc'] = misc.get_dict()
-
                 if result['structure'] is None and hasattr(outputs, 'structure'):
                     result['structure'] = outputs.structure
-
                 if result['remote'] is None and hasattr(outputs, 'remote_folder'):
                     result['remote'] = outputs.remote_folder
-
                 if result['files'] is None and hasattr(outputs, 'retrieved'):
                     result['files'] = outputs.retrieved
 
-    # Traverse CALL_CALC links to find energy calcfunction
     called_calc = wg_node.base.links.get_outgoing(link_type=LinkType.CALL_CALC)
     for link in called_calc.all():
         child_node = link.node
@@ -493,36 +601,30 @@ def _extract_sequential_stage_from_workgraph(
 
 
 def print_stage_results(index: int, stage_name: str, stage_result: Dict[str, Any]) -> None:
-    """Print formatted results for a VASP stage.
-
-    Args:
-        index: 1-based stage index.
-        stage_name: Name of the stage.
-        stage_result: Result dict from get_stage_results.
-    """
+    """Print formatted results for a dimer stage."""
     from ..console import console, print_stage_header
 
-    print_stage_header(index, stage_name, brick_type="vasp")
+    print_stage_header(index, stage_name, brick_type="dimer")
 
-    if stage_result['energy'] is not None:
+    if stage_result.get('energy') is not None:
         console.print(f"      [bold]Energy:[/bold] [energy]{stage_result['energy']:.6f}[/energy] eV")
 
-    if stage_result['structure'] is not None:
+    if stage_result.get('structure') is not None:
         struct = stage_result['structure']
         formula = struct.get_formula()
         n_atoms = len(struct.sites)
         console.print(f"      [bold]Structure:[/bold] {formula} [dim]({n_atoms} atoms, PK: {struct.pk})[/dim]")
 
-    if stage_result['misc'] is not None:
+    if stage_result.get('misc') is not None:
         misc = stage_result['misc']
         run_status = misc.get('run_status', 'N/A')
         max_force = misc.get('maximum_force', None)
         force_str = f", max_force: {max_force:.4f} eV/Å" if max_force else ""
         console.print(f"      [bold]Status:[/bold] {run_status}{force_str}")
 
-    if stage_result['remote'] is not None:
+    if stage_result.get('remote') is not None:
         console.print(f"      [bold]Remote folder:[/bold] PK [pk]{stage_result['remote'].pk}[/pk]")
 
-    if stage_result['files'] is not None:
+    if stage_result.get('files') is not None:
         files = stage_result['files'].list_object_names()
         console.print(f"      [bold]Retrieved:[/bold] [dim]{', '.join(files)}[/dim]")
