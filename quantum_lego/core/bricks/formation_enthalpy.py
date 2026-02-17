@@ -200,7 +200,6 @@ def create_stage_tasks(wg, stage, stage_name, context):
             raise ValueError(
                 f"Stage '{stage_name}': references['{el}']='input' is not supported"
             )
-        from . import resolve_structure_from, resolve_energy_from
         kwargs[f'ref_{el}_structure'] = resolve_structure_from(ref_stage, context)
         kwargs[f'ref_{el}_energy'] = resolve_energy_from(ref_stage, context)
 

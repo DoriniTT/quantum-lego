@@ -1,0 +1,26 @@
+# Fdb version 4
+["pdflatex"] 1771317594.52805 "/home/trevizam/git/quantum-lego/quantum_lego/core/bricks/surface_thermo_docs/o2_dft/o2_dft.tex" "o2_dft.pdf" "o2_dft" 1771317594.81993 2
+  "/etc/texmf/web2c/texmf.cnf" 1765200837.24104 475 c0e671620eb5563b2130f56340a5fde8 ""
+  "/home/trevizam/git/quantum-lego/quantum_lego/core/bricks/surface_thermo_docs/o2_dft/o2_dft.tex" 1771317593.87685 6538 f9d391f44a149d3863b6959c316cbfd3 ""
+  "/usr/share/texlive/texmf-dist/fonts/map/fontname/texfonts.map" 1577235249 3524 cb3e574dea2d1052e39280babc910dc8 ""
+  "/usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmr10.tfm" 1136768653 1296 45809c5a464d5f32c8f98ba97c1bb47f ""
+  "/usr/share/texlive/texmf-dist/tex/generic/iftex/iftex.sty" 1644112042 7237 bdd120a32c8fdb4b433cf9ca2e7cd98a ""
+  "/usr/share/texlive/texmf-dist/tex/generic/iftex/ifvtex.sty" 1572645307 1057 525c2192b5febbd8c1f662c9468335bb ""
+  "/usr/share/texlive/texmf-dist/tex/latex/base/article.cls" 1705352648 20144 147463a6a579f4597269ef9565205cfe ""
+  "/usr/share/texlive/texmf-dist/tex/latex/base/size11.clo" 1705352648 8464 59874a3b0776c73e2a138b025d8473dd ""
+  "/usr/share/texlive/texmf-dist/tex/latex/fontspec/fontspec.sty" 1642282977 1656 7e824878bad4df5a3e8bba4e463d9126 ""
+  "/usr/share/texlive/texmf-dist/tex/latex/geometry/geometry.sty" 1578002852 41601 9cf6c5257b1bc7af01a58859749dd37a ""
+  "/usr/share/texlive/texmf-dist/tex/latex/graphics/keyval.sty" 1654720880 2671 7e67d78d9b88c845599a85b2d41f2e39 ""
+  "/usr/share/texlive/texmf-dist/tex/latex/l3backend/l3backend-pdftex.def" 1704491087 30006 57b07afb710ee2f649c65cfbafda39c1 ""
+  "/usr/share/texlive/texmf-dist/tex/latex/l3kernel/expl3.sty" 1705955748 6565 cfd9fd0a1d5f5ad985151778771ff7a9 ""
+  "/usr/share/texlive/texmf-dist/tex/latex/l3packages/xparse/xparse.sty" 1696969620 9327 c30c00c0072edba199ede5889311aaa9 ""
+  "/usr/share/texlive/texmf-dist/web2c/texmf.cnf" 1707919699 40399 f2c302f7d2af602abb742093540a5834 ""
+  "/usr/share/texmf/web2c/texmf.cnf" 1707919699 40399 f2c302f7d2af602abb742093540a5834 ""
+  "/var/lib/texmf/web2c/pdftex/pdflatex.fmt" 1765200932 8215647 688398de9de7731aecca1bb3e8a9f060 ""
+  "o2_dft.aux" 1771317594.52485 32 3985256e7290058c681f74d7a3565a19 "pdflatex"
+  "o2_dft.tex" 1771317593.87685 6538 f9d391f44a149d3863b6959c316cbfd3 ""
+  (generated)
+  "o2_dft.aux"
+  "o2_dft.log"
+  "o2_dft.pdf"
+  (rewritten before read)

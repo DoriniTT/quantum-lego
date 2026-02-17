@@ -8,6 +8,7 @@ runtime (e.g. surface terminations generated from a relaxed bulk).
 
 from __future__ import annotations
 
+import logging
 import typing as t
 
 from aiida import orm
@@ -239,6 +240,10 @@ def get_stage_results(wg_node, wg_pk: int, stage_name: str, namespace_map: dict 
                     else:
                         energy_val = float(energy_node)
                 except Exception:
+                    logging.getLogger(__name__).warning(
+                        "Could not extract energy for label '%s' in stage '%s'",
+                        label, stage_name,
+                    )
                     energy_val = None
 
                 result['calculations'][label] = {

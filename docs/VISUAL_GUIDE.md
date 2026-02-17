@@ -308,8 +308,8 @@ graph TD
 
 ```mermaid
 graph TD
-    A[Initial Structure] --> B[Stage 1: Ground State SCF<br/>NSW=0]
-    B --> C[Stage 2: Hubbard Response<br/>Multiple perturbed calcs]
+    A[Initial Structure] --> B[Stage 1: Ground State SCF<br/>NSW=0, LORBIT=11, LWAVE=True]
+    B --> C[Stage 2: Hubbard Response<br/>NSCF + SCF per perturbation]
     C --> D[Stage 3: Hubbard Analysis<br/>Linear regression]
     D --> E[U Parameters]
 
@@ -319,26 +319,54 @@ graph TD
     style E fill:#C8E6C9,stroke:#2E7D32
 ```
 
-**Code:**
+**Validated result:** NiO 2x2x2 AFM supercell: U(Ni-d) = 5.08 eV (VASP wiki: 5.58 eV), R^2 > 0.999.
+
+**Code (convenience API):**
+```python
+from quantum_lego import quick_hubbard_u
+
+result = quick_hubbard_u(
+    structure=structure,
+    code_label='VASP-6.5.1-idefix-4@obelix',
+    target_species='Ni',
+    incar={'encut': 520, 'ediff': 1e-6, 'ismear': 0, 'sigma': 0.2,
+           'prec': 'Accurate', 'lmaxmix': 4, 'ispin': 2,
+           'magmom': [2.0] * 4 + [0.6] * 4},
+    potential_values=[-0.2, -0.1, 0.1, 0.2],
+    ldaul=2,
+    potential_family='PBE',
+    potential_mapping={'Ni': 'Ni', 'O': 'O'},
+    options=options,
+)
+```
+
+**Code (explicit stages):**
 ```python
 stages = [
     {
         'name': 'ground_state',
         'type': 'vasp',
-        'incar': {'NSW': 0, 'ENCUT': 500},
+        'incar': {**base_incar, 'nsw': 0, 'ibrion': -1,
+                  'lorbit': 11, 'lwave': True, 'lcharg': True},
+        'restart': None,
     },
     {
         'name': 'response',
         'type': 'hubbard_response',
         'ground_state_from': 'ground_state',
-        'perturbed_incar': {'ENCUT': 500},
-        'atom_index': 0,
-        'perturbations': [-0.2, -0.1, 0.1, 0.2],
+        'structure_from': 'input',
+        'target_species': 'Ni',
+        'potential_values': [-0.2, -0.1, 0.1, 0.2],
+        'ldaul': 2,
+        'incar': base_incar,
     },
     {
         'name': 'analysis',
         'type': 'hubbard_analysis',
         'response_from': 'response',
+        'structure_from': 'input',
+        'target_species': 'Ni',
+        'ldaul': 2,
     },
 ]
 ```

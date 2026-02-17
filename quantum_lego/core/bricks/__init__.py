@@ -34,6 +34,8 @@ from . import (
     surface_terminations,
     dynamic_batch,
     formation_enthalpy,
+    o2_reference_energy,
+    surface_gibbs_energy,
 )
 from .connections import (  # noqa: F401
     PORT_TYPES,
@@ -67,6 +69,8 @@ BRICK_REGISTRY = {
     'surface_terminations': surface_terminations,
     'dynamic_batch': dynamic_batch,
     'formation_enthalpy': formation_enthalpy,
+    'o2_reference_energy': o2_reference_energy,
+    'surface_gibbs_energy': surface_gibbs_energy,
 }
 
 VALID_BRICK_TYPES = tuple(BRICK_REGISTRY.keys())
@@ -97,13 +101,19 @@ def get_brick_module(brick_type: str):
 def resolve_structure_from(structure_from: str, context: dict):
     """Resolve a structure socket from a previous stage.
 
-    Only VASP, AIMD, QE, CP2K, and NEB stages produce a meaningful structure output.
+    Only VASP, AIMD, QE, CP2K, NEB, and o2_reference_energy stages produce a meaningful
+    structure output.
     Referencing a non-VASP/AIMD/QE/CP2K stage (dos, batch, bader, convergence,
     thickness, hubbard_response, hubbard_analysis) raises an error
     because those bricks don't produce structures.
 
+    Use ``structure_from='input'`` to reference the original input structure
+    passed to ``quick_vasp_sequential``. This is useful when the previous stage
+    is a static calculation (nsw=0) that does not emit a structure output.
+
     Args:
-        structure_from: Name of the stage to get structure from.
+        structure_from: Name of the stage to get structure from, or ``'input'``
+            to use the original input structure.
         context: The context dict passed to create_stage_tasks.
 
     Returns:
@@ -112,6 +122,10 @@ def resolve_structure_from(structure_from: str, context: dict):
     Raises:
         ValueError: If the referenced stage doesn't produce a structure.
     """
+    # Special keyword: use the original input structure
+    if structure_from == 'input':
+        return context['input_structure']
+
     stage_tasks = context['stage_tasks']
     stage_types = context['stage_types']
 
@@ -124,6 +138,9 @@ def resolve_structure_from(structure_from: str, context: dict):
         return stage_tasks[structure_from]['cp2k'].outputs.output_structure
     elif ref_stage_type == 'neb':
         return stage_tasks[structure_from]['neb'].outputs.structure
+    elif ref_stage_type == 'o2_reference_energy':
+        # o2_reference_energy exposes a dummy O2 StructureData via a calcfunction
+        return stage_tasks[structure_from]['structure'].outputs.result
     else:
         # Non-structure-producing bricks
         raise ValueError(
@@ -136,7 +153,7 @@ def resolve_structure_from(structure_from: str, context: dict):
 def resolve_energy_from(energy_from: str, context: dict):
     """Resolve an energy socket from a previous stage.
 
-    Only VASP and AIMD stages produce a meaningful energy output.
+    Only VASP, AIMD, CP2K, and o2_reference_energy stages produce a meaningful energy output.
     Referencing a non-VASP/AIMD stage raises an error.
 
     Args:
@@ -153,7 +170,7 @@ def resolve_energy_from(energy_from: str, context: dict):
     stage_types = context['stage_types']
 
     ref_stage_type = stage_types.get(energy_from, 'vasp')
-    if ref_stage_type in ('vasp', 'aimd', 'cp2k'):
+    if ref_stage_type in ('vasp', 'aimd', 'cp2k', 'o2_reference_energy'):
         return stage_tasks[energy_from]['energy'].outputs.result
     else:
         raise ValueError(

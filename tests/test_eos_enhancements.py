@@ -419,7 +419,7 @@ class TestBrickRegistryRefine:
 
     def test_registry_count_increased(self):
         from quantum_lego.core.bricks import BRICK_REGISTRY
-        assert len(BRICK_REGISTRY) == 21
+        assert len(BRICK_REGISTRY) == 23
 
 
 # ---------------------------------------------------------------------------

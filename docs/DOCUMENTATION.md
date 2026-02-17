@@ -413,7 +413,9 @@ graph LR
 
 ### 8. Hubbard U Bricks (`hubbard_response`, `hubbard_analysis`)
 
-Calculate Hubbard U parameters using linear response method.
+Calculate Hubbard U parameters using the linear response method of Cococcioni & de Gironcoli.
+
+**Validated:** NiO 2x2x2 AFM supercell (32 atoms) gives U(Ni-d) = 5.08 eV (VASP wiki reference: 5.58 eV), with R^2 > 0.999 for both chi and chi_0 fits.
 
 ```mermaid
 graph LR
@@ -426,7 +428,76 @@ graph LR
     style D fill:#8BC34A
 ```
 
-**Use cases:** DFT+U calculations for correlated systems
+**Use cases:** DFT+U calculations for correlated systems (transition metal oxides, rare earths)
+
+**Two approaches:**
+
+1. **`quick_hubbard_u`** — convenience API that auto-builds the 3-stage pipeline:
+```python
+from quantum_lego import quick_hubbard_u
+
+result = quick_hubbard_u(
+    structure=structure,
+    code_label='VASP-6.5.1-idefix-4@obelix',
+    target_species='Ni',
+    incar={'encut': 520, 'ediff': 1e-6, 'ismear': 0, 'sigma': 0.2,
+           'prec': 'Accurate', 'lmaxmix': 4, 'ispin': 2,
+           'magmom': [2.0] * 4 + [0.6] * 4},
+    potential_values=[-0.2, -0.15, -0.1, -0.05, 0.05, 0.1, 0.15, 0.2],
+    ldaul=2,
+    kpoints_spacing=0.03,
+    potential_family='PBE',
+    potential_mapping={'Ni': 'Ni', 'O': 'O'},
+    options=options,
+)
+```
+
+2. **Explicit stages** — full control via `quick_vasp_sequential`:
+```python
+stages = [
+    {
+        'name': 'ground_state',
+        'type': 'vasp',
+        'incar': {**base_incar, 'nsw': 0, 'ibrion': -1,
+                  'lorbit': 11, 'lwave': True, 'lcharg': True},
+        'restart': None,
+        'kpoints_spacing': 0.03,
+    },
+    {
+        'name': 'response',
+        'type': 'hubbard_response',
+        'ground_state_from': 'ground_state',
+        'structure_from': 'input',
+        'target_species': 'Ni',
+        'potential_values': [-0.20, -0.15, -0.10, -0.05, 0.05, 0.10, 0.15, 0.20],
+        'ldaul': 2,
+        'incar': base_incar,
+        'kpoints_spacing': 0.03,
+    },
+    {
+        'name': 'analysis',
+        'type': 'hubbard_analysis',
+        'response_from': 'response',
+        'structure_from': 'input',
+        'target_species': 'Ni',
+        'ldaul': 2,
+    },
+]
+```
+
+**Key parameters:**
+- `target_species`: Element symbol for the perturbed atom (e.g., `'Ni'`, `'Sn'`, `'Fe'`)
+- `potential_values`: Perturbation potentials in eV (must not include 0.0; symmetric values recommended)
+- `ldaul`: Angular momentum quantum number (`2` for d-electrons, `3` for f-electrons)
+- `lmaxmix`: Set to `4` for d-electrons, `6` for f-electrons
+
+**Output (`hubbard_u_result` Dict):**
+- `U`: Hubbard U value in eV
+- `chi_r2`, `chi_0_r2`: R-squared of the linear fits (should be > 0.99)
+- `chi_slope`, `chi_0_slope`: Slopes of SCF and NSCF response
+- `potential_values`, `delta_n_scf_values`, `delta_n_nscf_values`: Raw data points
+
+**Reference:** [VASP wiki — Calculate U for LSDA+U](https://www.vasp.at/wiki/index.php/Calculate_U_for_LSDA+U)
 
 ### 9. NEB Bricks (`generate_neb_images`, `neb`)
 
@@ -642,6 +713,97 @@ stages = [
     },
 }
 ```
+
+---
+
+### 15. Surface Terminations Brick (`surface_terminations`)
+
+Generate **symmetrized slab terminations** for a given bulk structure and Miller index (pure-Python analysis brick).
+
+**Use cases:** Build slab models before relaxation; enumerate all distinct terminations.
+
+**Example:**
+```python
+stages = [
+    {
+        'name': 'slab_terms',
+        'type': 'surface_terminations',
+        'structure_from': 'bulk_relax',
+        'miller_indices': [1, 1, 0],
+        'min_slab_size': 18.0,
+        'min_vacuum_size': 15.0,
+        'lll_reduce': True,
+        'center_slab': True,
+        'primitive': True,
+        'reorient_lattice': True,
+    },
+]
+```
+
+---
+
+### 16. Dynamic Batch Brick (`dynamic_batch`)
+
+Fan-out **many VASP relaxations in parallel** from a dynamically generated structure namespace (scatter-gather).
+
+**Use cases:** Relax multiple slab terminations; relax defect variants; any stage where structures are only known at runtime.
+
+**Example:**
+```python
+{
+    'name': 'slab_relax',
+    'type': 'dynamic_batch',
+    'structures_from': 'slab_terms',
+    'base_incar': slab_incar,
+    'kpoints_spacing': 0.05,
+}
+```
+
+---
+
+### 17. Formation Enthalpy Brick (`formation_enthalpy`)
+
+Compute ΔHf (per reduced formula unit) from a target bulk energy and elemental reference energies.
+
+**Use cases:** Ab initio thermodynamics; stability limits for chemical potentials.
+
+**Example:**
+```python
+{
+    'name': 'dhf',
+    'type': 'formation_enthalpy',
+    'structure_from': 'bulk_relax',
+    'energy_from': 'bulk_relax',
+    'references': {'Sn': 'sn_relax', 'O': 'o2_ref'},
+}
+```
+
+---
+
+### 18. O2 Reference Energy Brick (`o2_reference_energy`)
+
+Compute an **effective** O₂ reference energy via the water-splitting reaction (avoids the direct DFT O₂ error):
+
+```
+E_ref(O2) = 2 E_DFT(H2O) - 2 E_DFT(H2) + 5.52 eV
+```
+
+This brick runs VASP for **H₂** and **H₂O** (molecule-in-a-box, typically Γ-only), then exposes:
+- `energy`: `E_ref(O2)` (Float, eV per O₂ molecule)
+- `structure`: dummy 2-atom O₂ StructureData (to interoperate with `formation_enthalpy`)
+- `misc`: Dict with the full breakdown
+
+---
+
+### 19. Surface Gibbs Energy Brick (`surface_gibbs_energy`)
+
+Compute surface Gibbs free energies γ(Δμ) for each relaxed termination using
+ab initio atomistic thermodynamics.
+
+For a **binary oxide**, this produces γ(ΔμO) curves (J/m²) for each termination.
+
+**Working example (binary oxide, SnO2(110)):**
+`examples/06_surface/binary_surface_thermo/`
 
 ---
 

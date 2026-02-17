@@ -726,6 +726,77 @@ FORMATION_ENTHALPY_PORTS = {
     },
 }
 
+O2_REFERENCE_ENERGY_PORTS = {
+    # NOTE: Inputs are intentionally not declared here because validate_connections()
+    # expects input sources to be stage-name references (strings). This brick takes
+    # explicit StructureData/PKs for H2 and H2O, so full validation is handled by
+    # the brick's validate_stage() instead.
+    'inputs': {},
+    'outputs': {
+        'structure': {
+            'type': 'structure',
+            'description': 'Dummy O2 structure (2 O atoms) for reference compatibility',
+        },
+        'energy': {
+            'type': 'energy',
+            'description': 'Effective O2 reference energy E_ref(O2) (eV per O2)',
+        },
+        'misc': {
+            'type': 'misc',
+            'description': 'Details dict for the water-splitting O2 reference energy',
+        },
+    },
+}
+
+SURFACE_GIBBS_ENERGY_PORTS = {
+    'inputs': {
+        'bulk_structure': {
+            'type': 'structure',
+            'required': True,
+            'source': 'bulk_structure_from',
+            'description': 'Relaxed bulk structure',
+        },
+        'bulk_energy': {
+            'type': 'energy',
+            'required': True,
+            'source': 'bulk_energy_from',
+            'description': 'Bulk total energy (eV)',
+        },
+        'slab_structures': {
+            'type': 'structures',
+            'required': True,
+            'source': 'slab_structures_from',
+            'description': 'Relaxed slab structures (dynamic namespace)',
+        },
+        'slab_energies': {
+            'type': 'energies',
+            'required': True,
+            'source': 'slab_energies_from',
+            'description': 'Slab total energies (dynamic namespace)',
+        },
+        'formation_enthalpy': {
+            'type': 'formation_enthalpy',
+            'required': True,
+            'source': 'formation_enthalpy_from',
+            'description': 'Formation enthalpy Dict from formation_enthalpy brick',
+        },
+    },
+    'outputs': {
+        'surface_energies': {
+            'type': 'misc',
+            'description': 'Per-termination surface Gibbs free energies (dynamic namespace)',
+        },
+        'summary': {
+            'type': 'misc',
+            'description': 'Collected surface Gibbs free energies (single Dict)',
+        },
+        'oxide_type': {
+            'type': 'misc',
+            'description': "Oxide type label ('binary' or 'ternary')",
+        },
+    },
+}
+
 HYBRID_BANDS_PORTS = {
     'inputs': {
         'structure': {
@@ -780,6 +851,8 @@ ALL_PORTS = {
     'surface_terminations': SURFACE_TERMINATIONS_PORTS,
     'dynamic_batch': DYNAMIC_BATCH_PORTS,
     'formation_enthalpy': FORMATION_ENTHALPY_PORTS,
+    'o2_reference_energy': O2_REFERENCE_ENERGY_PORTS,
+    'surface_gibbs_energy': SURFACE_GIBBS_ENERGY_PORTS,
 }
 
 

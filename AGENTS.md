@@ -175,8 +175,8 @@ print_stage_results()    # Format results for display
 | `bader` | `bricks/bader.py` | Bader charge analysis |
 | `convergence` | `bricks/convergence.py` | ENCUT and k-points convergence testing |
 | `thickness` | `bricks/thickness.py` | Slab thickness convergence testing |
-| `hubbard_response` | `bricks/hubbard_response.py` | Hubbard U response calculations |
-| `hubbard_analysis` | `bricks/hubbard_analysis.py` | Hubbard U regression and summary |
+| `hubbard_response` | `bricks/hubbard_response.py` | Hubbard U response calculations (validated) |
+| `hubbard_analysis` | `bricks/hubbard_analysis.py` | Hubbard U regression and summary (validated) |
 | `aimd` | `bricks/aimd.py` | Ab initio molecular dynamics (IBRION=0) |
 | `qe` | `bricks/qe.py` | Quantum ESPRESSO pw.x calculations |
 | `cp2k` | `bricks/cp2k.py` | CP2K calculations |
@@ -185,6 +185,24 @@ print_stage_results()    # Format results for display
 | `birch_murnaghan` | `bricks/birch_murnaghan.py` | Birch-Murnaghan EOS fitting from batch energies |
 | `birch_murnaghan_refine` | `bricks/birch_murnaghan_refine.py` | Refined BM EOS scan around V0 |
 | `fukui_analysis` | `bricks/fukui_analysis.py` | Fukui index analysis from batch charges |
+
+### Validated Brick Workflows
+
+The following brick workflows have been validated against published reference results:
+
+| Workflow | System | Result | Reference | Example |
+|----------|--------|--------|-----------|---------|
+| Hubbard U (`hubbard_response` + `hubbard_analysis`) | NiO 2x2x2 AFM supercell (32 atoms) | U(Ni-d) = 5.08 eV, R^2 > 0.999 | [VASP wiki](https://www.vasp.at/wiki/index.php/Calculate_U_for_LSDA+U): 5.58 eV | `examples/07_advanced_vasp/hubbard_u_nio.py` |
+
+**Hubbard U usage notes:**
+- Use `quick_hubbard_u` for the simplest interface (auto-builds 3-stage pipeline)
+- Use explicit `quick_vasp_sequential` stages for full control (e.g., custom supercell, AFM ordering, `prepare_perturbed_structure`)
+- `target_species`: element symbol of the perturbed atom (e.g., `'Ni'`, `'Sn'`)
+- `potential_values`: perturbation potentials in eV, symmetric around 0 (must not include 0.0)
+- `ldaul=2` for d-electrons, `ldaul=3` for f-electrons
+- Set `lmaxmix=4` (d) or `lmaxmix=6` (f) in the base INCAR
+- Ground state stage requires `lorbit=11`, `lwave=True`, `lcharg=True`
+- More perturbation points improve fit quality; 8 points (4 negative + 4 positive) recommended
 
 ### Port System (`connections.py`)
 

@@ -121,11 +121,12 @@ class TestBrickRegistry:
             'hubbard_analysis', 'aimd', 'qe', 'cp2k',
             'generate_neb_images', 'neb', 'surface_enumeration',
             'surface_terminations', 'dynamic_batch', 'formation_enthalpy',
+            'o2_reference_energy', 'surface_gibbs_energy',
         )
 
-    def test_registry_has_twenty_one_entries(self):
+    def test_registry_has_twenty_three_entries(self):
         from quantum_lego.core.bricks import BRICK_REGISTRY
-        assert len(BRICK_REGISTRY) == 21
+        assert len(BRICK_REGISTRY) == 23
 
     def test_get_brick_module_valid_types(self):
         from quantum_lego.core.bricks import get_brick_module, VALID_BRICK_TYPES

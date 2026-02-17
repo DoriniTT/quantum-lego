@@ -2,7 +2,7 @@
 
 Lightweight, incremental VASP calculation module for exploratory work.
 
-📚 **[Brick Connection Guide](docs/BRICK_CONNECTIONS.md)** - Visual guide showing how all 16 brick types connect together like Lego pieces
+📚 **[Brick Connection Guide](docs/BRICK_CONNECTIONS.md)** - Visual guide showing how bricks connect together like Lego pieces
 
 ## Design Philosophy
 

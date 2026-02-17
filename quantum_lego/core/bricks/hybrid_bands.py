@@ -73,10 +73,10 @@ def validate_stage(stage: Dict[str, Any], stage_names: Set[str]) -> None:
 
     if has_structure_from:
         structure_from = stage['structure_from']
-        if structure_from not in stage_names:
+        if structure_from != 'input' and structure_from not in stage_names:
             raise ValueError(
                 f"Stage '{name}' structure_from='{structure_from}' must reference "
-                f"a previous stage name"
+                f"a previous stage name or 'input'"
             )
 
 

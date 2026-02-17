@@ -1,0 +1,154 @@
+\documentclass[11pt, a4paper]{article}
+
+% --- UNIVERSAL PREAMBLE BLOCK ---
+\usepackage[a4paper, top=2.5cm, bottom=2.5cm, left=2cm, right=2cm]{geometry}
+\usepackage{fontspec}
+
+\usepackage[english, bidi=basic, provide=*]{babel}
+
+% Set default/Latin font to Sans Serif in the main (rm) slot
+\babelfont{rm}{Noto Sans}
+
+% Add because main language is not English (Standard practice for robustness)
+\usepackage{enumitem}
+\setlist[itemize]{label=-}
+
+\usepackage{amsmath}
+\usepackage{parskip}
+
+\title{\textbf{Reference Energy of Oxygen in DFT Calculations via Experimental Water-Splitting Thermodynamics}}
+\author{Methodological Report}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction and Context}
+
+A well-known limitation of standard Density Functional Theory (DFT), particularly Generalized Gradient Approximation (GGA) exchange--correlation functionals such as PBE, is the inaccurate description of the oxygen molecule ($O_2$). These functionals typically overbind $O_2$ due to self-interaction errors and the difficulty of describing its triplet ground state. As a result, direct DFT calculations of $O_2$ often lead to significant systematic errors in reaction energies involving oxygen, typically on the order of $0.4$--$1.0\,\text{eV}$.
+
+To avoid propagating this error, a common approach in computational catalysis and electrochemistry is to bypass the direct DFT energy of $O_2$ and instead define an \emph{effective reference energy} for oxygen. This reference is constructed by enforcing agreement with the experimentally measured Gibbs free energy of the water-splitting reaction. This procedure is widely used in electrocatalysis studies and is consistent with the Computational Hydrogen Electrode (CHE) framework.
+
+The resulting quantity is not the physical electronic energy of an isolated oxygen molecule, but rather an effective reference energy that ensures thermodynamic consistency with experimental data.
+
+\section{Thermodynamic Framework}
+
+The reference energy of oxygen is determined by fixing the chemical potential of oxygen to reproduce the experimental Gibbs free energy of the water-splitting reaction:
+
+\begin{equation}
+2H_2O(g) \rightarrow 2H_2(g) + O_2(g)
+\end{equation}
+
+Under standard conditions ($T=298.15\,\text{K}$, $p=1\,\text{bar}$), the experimental Gibbs free energy change for this reaction is
+
+\begin{equation}
+\Delta G_{exp} = 4.92\,\text{eV}
+\end{equation}
+
+All energies in this work are expressed in electronvolts (eV) per molecule. Gas-phase species are treated within the ideal gas approximation at standard conditions.
+
+The thermodynamic definition of the reaction energy is
+
+\begin{equation}
+\Delta G_{exp} = G(O_2) + 2G(H_2) - 2G(H_2O)
+\end{equation}
+
+from which the Gibbs free energy of oxygen can be obtained:
+
+\begin{equation}
+G(O_2) = \Delta G_{exp} + 2G(H_2O) - 2G(H_2)
+\end{equation}
+
+\section{Connection Between Gibbs Free Energy and DFT Energies}
+
+For an isolated molecule, the Gibbs free energy is written as
+
+\begin{equation}
+G = E_{DFT} + ZPE - TS
+\end{equation}
+
+where $E_{DFT}$ is the electronic total energy obtained from a DFT calculation, $ZPE$ is the zero-point energy, and $TS$ is the entropic contribution at temperature $T$.
+
+Substituting this relation into the previous expression yields
+
+\begin{equation}
+\begin{aligned}
+G(O_2) = &\, \Delta G_{exp} + 2[E_{DFT}(H_2O) + ZPE_{H_2O} - TS_{H_2O}] \\
+&- 2[E_{DFT}(H_2) + ZPE_{H_2} - TS_{H_2}]
+\end{aligned}
+\end{equation}
+
+Since the goal is to define an effective electronic reference energy for oxygen, the thermodynamic corrections of oxygen must be removed:
+
+\begin{equation}
+E_{ref}(O_2) = G(O_2) - ZPE_{O_2} + TS_{O_2}
+\end{equation}
+
+Combining the expressions gives
+
+\begin{equation}
+\begin{aligned}
+E_{ref}(O_2) = &\, \Delta G_{exp} + 2[E_{DFT}(H_2O) + ZPE_{H_2O} - TS_{H_2O}] \\
+&- 2[E_{DFT}(H_2) + ZPE_{H_2} - TS_{H_2}] \\
+&- ZPE_{O_2} + TS_{O_2}
+\end{aligned}
+\end{equation}
+
+This expression defines an effective oxygen reference energy that replaces the direct DFT energy of $O_2$ in subsequent calculations.
+
+\section{Thermodynamic Corrections and Assumptions}
+
+Standard thermodynamic corrections for gas-phase molecules at $298.15\,\text{K}$ and $1\,\text{bar}$ are used:
+
+\begin{itemize}
+\item \textbf{$H_2O$:} $ZPE = 0.56\,\text{eV}$, $TS = 0.67\,\text{eV}$
+\item \textbf{$H_2$:} $ZPE = 0.27\,\text{eV}$, $TS = 0.41\,\text{eV}$
+\item \textbf{$O_2$:} $ZPE = 0.10\,\text{eV}$, $TS = 0.64\,\text{eV}$
+\end{itemize}
+
+These values are commonly adopted in electrocatalysis literature. The resulting constant depends on the chosen thermodynamic corrections and may vary slightly across studies.
+
+This approach assumes that DFT provides sufficiently accurate energies for $H_2$ and $H_2O$, while the dominant systematic error arises from the description of $O_2$. The method therefore replaces the DFT error in the O=O bond by enforcing experimental water-splitting thermodynamics.
+
+In surface catalysis applications, entropic contributions of adsorbed species are typically neglected, while gas-phase molecules include full thermodynamic corrections.
+
+\section{Calculation of the Reference Energy Constant}
+
+Substituting the numerical values gives
+
+\begin{equation}
+\begin{aligned}
+E_{ref}(O_2) = &\, 2E_{DFT}(H_2O) - 2E_{DFT}(H_2) + 4.92 \\
+&+ 2(0.56 - 0.67) - 2(0.27 - 0.41) - 0.10 + 0.64
+\end{aligned}
+\end{equation}
+
+The constant contribution is evaluated as follows:
+
+\begin{itemize}
+\item Water contribution: $2(0.56-0.67) = -0.22\,\text{eV}$
+\item Hydrogen contribution: $-2(0.27-0.41) = +0.28\,\text{eV}$
+\item Oxygen contribution: $-0.10 + 0.64 = +0.54\,\text{eV}$
+\end{itemize}
+
+The total constant becomes
+
+\begin{equation}
+4.92 - 0.22 + 0.28 + 0.54 = 5.52\,\text{eV}
+\end{equation}
+
+\section{Final Formulation}
+
+The effective oxygen reference energy is therefore
+
+\begin{equation}
+\boxed{E_{ref}(O_2) = 2E_{DFT}(H_2O) - 2E_{DFT}(H_2) + 5.52\,\text{eV}}
+\end{equation}
+
+where $E_{DFT}(H_2O)$ and $E_{DFT}(H_2)$ are the total energies of isolated gas-phase molecules obtained from DFT calculations. The constant term accounts for experimental reaction thermodynamics, zero-point energies, and entropic contributions at standard conditions.
+
+The quantity $E_{ref}(O_2)$ should be used as the oxygen reference energy in binding or formation energy calculations instead of the direct DFT energy of $O_2$. This ensures thermodynamic consistency with experimental water-splitting energetics and reduces systematic errors associated with the DFT description of the oxygen molecule.
+
+\end{document}
+
