@@ -285,6 +285,7 @@ def quick_vasp_sequential(
     poll_interval: float = 10.0,
     clean_workdir: bool = False,
     concatenate_aimd_trajectories: bool = False,
+    serialize_stages: bool = False,
 ) -> dict:
     """
     Submit a multi-stage sequential VASP calculation with automatic restart chaining.
@@ -308,6 +309,11 @@ def quick_vasp_sequential(
         wait: If True, block until calculation finishes (default: False)
         poll_interval: Seconds between status checks when wait=True
         clean_workdir: Whether to clean work directories after completion
+        serialize_stages: If True, force all stages to run one at a time in
+                         the order they appear, regardless of data dependencies.
+                         Useful to avoid flooding a cluster queue when many
+                         independent stages would otherwise start simultaneously.
+                         (default: False)
 
     Returns:
         Dict with:
@@ -467,6 +473,10 @@ def quick_vasp_sequential(
         - When supercell is specified, restart is automatically set to None
         - VaspWorkChain handles WAVECAR/CHGCAR copying from restart.folder automatically
     """
+
+    def _serialize_barrier() -> bool:
+        """No-op task used to serialize stages via _wait links (avoids Task.waiting_on deserialization issues)."""
+        return True
     # Validate required inputs
     if structure is None:
         raise ValueError("structure is required")
@@ -498,6 +508,8 @@ def quick_vasp_sequential(
     stage_names = []  # Ordered list
     stage_types = {}  # name -> 'vasp', 'dos', 'batch', 'bader', etc.
     stage_namespaces = {}  # name -> namespace_map (e.g. {'main': 's01_relax_2x2_rough'})
+    _prev_stage_barrier_task = None  # Used by serialize_stages
+    _WG_BUILTIN_TASK_NAMES = {'graph_inputs', 'graph_outputs', 'graph_ctx'}
 
     for i, stage in enumerate(stages):
         stage_name = stage['name']
@@ -526,8 +538,27 @@ def quick_vasp_sequential(
         # Delegate to brick module
         from .bricks import get_brick_module
         brick = get_brick_module(stage_type)
+        _names_before = {t.name for t in wg.tasks if t.name not in _WG_BUILTIN_TASK_NAMES}
         tasks_result = brick.create_stage_tasks(wg, stage, stage_name, context)
         stage_tasks[stage_name] = tasks_result
+
+        # serialize_stages: chain stages so each starts only after the previous finishes.
+        # Do NOT use Task.waiting_on: it serializes to the per-task "wait" list and aiida-workgraph
+        # validates wait targets during WorkGraph.from_dict before all tasks exist (AiiDA may reorder keys).
+        _new_tasks_all = [t for t in wg.tasks
+                           if t.name not in _WG_BUILTIN_TASK_NAMES and t.name not in _names_before]
+        if serialize_stages and _prev_stage_barrier_task is not None and _new_tasks_all:
+            for _task in _new_tasks_all:
+                wg.add_link(_prev_stage_barrier_task.outputs._wait, _task.inputs._wait)
+
+        if serialize_stages and _new_tasks_all:
+            barrier = wg.add_task(
+                _serialize_barrier,
+                name=f'serialize_barrier_{i + 1:03d}_{stage_name}',
+            )
+            for _task in _new_tasks_all:
+                wg.add_link(_task.outputs._wait, barrier.inputs._wait)
+            _prev_stage_barrier_task = barrier
 
         # Build namespace_map with index prefix for ordered display
         # Use 's' prefix (stage) since Python identifiers can't start with digits

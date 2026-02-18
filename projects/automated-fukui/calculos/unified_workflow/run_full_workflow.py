@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Unified SnO2 characterisation workflow.
 
-Combines five sequential phases into a single WorkGraph submission:
+Combines six sequential phases into a single WorkGraph submission:
 
   Phase 1 – Ground state (rough relax → BM EOS → full ionic/cell relax)
       initial_relax → volume_scan → eos_fit → eos_refine → bulk_relax
@@ -23,13 +23,20 @@ Combines five sequential phases into a single WorkGraph submission:
   Phase 4 – Surface enumeration (pure Python, no VASP)
       enumerate_surfaces
       Identifies all symmetrically distinct low-index surfaces of the
-      relaxed structure. Hard-coded max_index=1 → 5 surfaces for SnO2.
+      relaxed structure. Hard-coded max_index=1 → typically 5 for SnO2.
 
-  Phase 5 – Surface thermodynamics for SnO2(110)
-      sn_relax + o2_ref → slab_terms → slab_relax → dhf → surface_gibbs
-      Computes γ(ΔμSn, ΔμO) for all (110) terminations via ab initio
-      thermodynamics.  Sn and O2 references run independently (in parallel
-      with Phase 1 BM chain) as they carry no structural dependency.
+  Phase 5 – Surface thermodynamics for all enumerated orientations
+      sn_relax + o2_ref (shared references)
+      dhf (formation enthalpy, shared)
+      Per-orientation loop (hkl in miller_list):
+        slab_terms_{hkl} → slab_relax_{hkl} → surface_gibbs_{hkl}
+
+  Phase 6 – Fukui +/- on the most stable termination per orientation
+      Per-orientation loop (hkl in miller_list):
+        select_stable_{hkl} (picks termination with min φ at ΔμM=ΔμO=0)
+        fukui_batch_{hkl}   (8 VASP static SCFs: dN ∈ {0,±0.05,±0.10,±0.15})
+        fukui_plus_{hkl}    (Fukui f+ interpolation)
+        fukui_minus_{hkl}   (Fukui f- interpolation)
 
 Note on parallelism
 -------------------
@@ -42,18 +49,22 @@ data edges run simultaneously.  Expected parallel groups at launch:
          hub_analysis (after hub_response)
   T=3 : eos_refine (after eos_fit)
   T=4 : bulk_relax (after eos_refine)
-  T=5 : hse_prerelax, enumerate_surfaces, slab_terms  (after bulk_relax)
+  T=5 : hse_prerelax, enumerate_surfaces (after bulk_relax)
          dhf  (after bulk_relax + sn_relax + o2_ref)
+         slab_terms_{hkl} for all orientations (after bulk_relax)
   T=6 : hse_bands, hse_dos (after hse_prerelax)
-         slab_relax (after slab_terms)
-  T=7 : surface_gibbs (after slab_relax + dhf)
+         slab_relax_{hkl} for all orientations (after slab_terms_{hkl})
+  T=7 : surface_gibbs_{hkl} for all orientations (after slab_relax_{hkl} + dhf)
+  T=8 : select_stable_{hkl} (after surface_gibbs_{hkl} + slab_relax_{hkl})
+  T=9 : fukui_batch_{hkl} (after select_stable_{hkl})
+  T=10: fukui_plus_{hkl}, fukui_minus_{hkl} (after fukui_batch_{hkl})
 
-Brick restructuring
--------------------
-Running this workflow requires the one-line fix in
-  quantum_lego/core/bricks/__init__.py :: resolve_structure_from
-to add birch_murnaghan / birch_murnaghan_refine support so that
-bulk_relax can consume the recommended_structure from eos_refine.
+Brick changes required
+----------------------
+  quantum_lego/core/bricks/__init__.py     – resolve_structure_from for BM + select_stable_surface
+  quantum_lego/core/bricks/select_stable_surface.py  (new brick)
+  quantum_lego/core/bricks/fukui_dynamic.py          (new brick)
+  quantum_lego/core/bricks/fukui_analysis.py         – fukui_dynamic branch
 
 Usage
 -----
@@ -62,7 +73,7 @@ Usage
 Requirements
 ------------
     aiida profile 'presto' configured with:
-      - VASP-VTST-6.4.3@bohr code
+      - VASP-6.5.1-idefix-4@obelix code
       - PBE potential family (Sn_d, O, H pseudopotentials)
     Structure files (see STRUCT_DIR below)
 """
@@ -74,6 +85,7 @@ from pathlib import Path
 from datetime import datetime
 
 from pymatgen.core import Structure
+from pymatgen.core.surface import get_symmetrically_distinct_miller_indices
 from ase.io import read
 from aiida import orm, load_profile
 from quantum_lego import quick_vasp_sequential, print_sequential_results
@@ -88,17 +100,10 @@ load_profile(profile='presto')
 # All structures live in the surface_thermo structures folder (complete set).
 STRUCT_DIR = Path(__file__).parent.parent / 'surface_thermo' / 'structures'
 
-# The Hubbard U script historically kept sno2.vasp one level up in hubbard_u/
-# structures/ – we point to the same surface_thermo copy for consistency.
-SNO2_VASP   = STRUCT_DIR / 'sno2.vasp'
-SN_CIF      = STRUCT_DIR / 'Sn.cif'
-H2_CIF      = STRUCT_DIR / 'H2.cif'
-H2O_CIF     = STRUCT_DIR / 'H2O.cif'
-
-# ---------------------------------------------------------------------------
-# Surface for thermodynamics
-# ---------------------------------------------------------------------------
-SURFACE_MILLER = [1, 1, 0]   # SnO2(110) – most stable, well-studied surface
+SNO2_VASP = STRUCT_DIR / 'sno2.vasp'
+SN_CIF    = STRUCT_DIR / 'Sn.cif'
+H2_CIF    = STRUCT_DIR / 'H2.cif'
+H2O_CIF   = STRUCT_DIR / 'H2O.cif'
 
 # ---------------------------------------------------------------------------
 # Phase 1 structures: SnO2 primitive cell (main workflow input)
@@ -111,9 +116,8 @@ sno2_prim = orm.StructureData(ase=atoms)
 #
 # One Sn atom → kind 'Sn'  (perturbed, receives LDAUU potential)
 # Other 15 Sn → kind 'Sn1' (unperturbed, LDAUU = 0)
-# This is the VASP-wiki protocol for the linear-response U calculation.
-# We build it at submission time from the primitive cell (standard practice –
-# U is an electronic property insensitive to ~1 % volume differences).
+# Built at submission time from the primitive cell (standard practice – U is
+# an electronic property insensitive to ~1 % volume differences).
 # ---------------------------------------------------------------------------
 pmg_supercell = Structure.from_file(str(SNO2_VASP))
 pmg_supercell.make_supercell([2, 2, 2])           # 16 Sn + 32 O = 48 atoms
@@ -123,20 +127,33 @@ split_supercell, _perturbed_kind, _unperturbed_kind = prepare_perturbed_structur
 )
 
 # ---------------------------------------------------------------------------
-# Phase 5 reference structures
+# Phase 5/6 reference structures (shared across all orientations)
 # ---------------------------------------------------------------------------
 ref_sn  = orm.StructureData(ase=read(str(SN_CIF)))
 ref_h2  = orm.StructureData(ase=read(str(H2_CIF)))
 ref_h2o = orm.StructureData(ase=read(str(H2O_CIF)))
 
 # ---------------------------------------------------------------------------
+# Phase 5 – pre-enumerate all distinct low-index surface orientations
+#
+# We run pymatgen at submission time so we can build stage configs in a Python
+# loop without AiiDA.  The WorkGraph enumerate_surfaces stage (Phase 4) still
+# runs as a verification step.
+# ---------------------------------------------------------------------------
+pmg_sno2    = Structure.from_file(str(SNO2_VASP))
+miller_list = get_symmetrically_distinct_miller_indices(pmg_sno2, max_index=1)
+# Typical output for SnO2 rutile: (0,0,1), (1,0,0), (1,1,0), (1,0,1), (1,1,1)
+print(f'Distinct low-index surfaces (max_index=1): {miller_list}')
+
+def hkl_str(hkl: tuple) -> str:
+    """Convert Miller index tuple to a safe stage-name suffix, e.g. (1,1,0) → '110'."""
+    return ''.join(str(abs(h)) for h in hkl)
+
+# ---------------------------------------------------------------------------
 # INCAR blocks
 # ---------------------------------------------------------------------------
 
 # ── Phase 1: rough pre-relax (ISIF=3, loose convergence) ─────────────────
-# Brings ionic positions and cell shape to near-equilibrium before the BM
-# scan so that volume-scaled structures sit in the correct energy basin.
-# Loose ediff/ediffg keep this stage fast; tight convergence follows later.
 rough_relax_incar = {
     'encut': 520,
     'ediff': 1e-4,
@@ -186,8 +203,8 @@ hub_base_incar = {
     'ismear': 0,
     'sigma': 0.05,
     'prec': 'Accurate',
-    'lreal': 'Auto',    # recommended for supercells
-    'lmaxmix': 4,       # required for d-electrons
+    'lreal': 'Auto',
+    'lmaxmix': 4,
 }
 
 # ── Phase 3: HSE06 common settings ───────────────────────────────────────
@@ -307,6 +324,21 @@ slab_incar = {
     'lcharg': False,
 }
 
+# ── Phase 6: Fukui static SCF (CHGCAR mandatory) ─────────────────────────
+# NELECT is injected at runtime by the fukui_dynamic brick.
+fukui_incar = {
+    'encut': 520,
+    'ediff': 1e-6,
+    'nsw': 0,           # static SCF only
+    'ibrion': -1,
+    'ismear': 0,
+    'sigma': 0.05,
+    'prec': 'Accurate',
+    'lreal': 'Auto',
+    'lwave': False,
+    'lcharg': True,     # CHGCAR required by fukui_analysis
+}
+
 # ---------------------------------------------------------------------------
 # Phase 1: BM volume scan – pre-compute scaled structures
 # ---------------------------------------------------------------------------
@@ -319,8 +351,8 @@ for strain in strains:
     sign  = 'm' if strain < 0 else 'p'
     label = f'v_{sign}{abs(strain * 100):03.0f}'
 
-    scale_factor   = (1.0 + strain) ** (1.0 / 3.0)
-    scaled         = atoms.copy()
+    scale_factor = (1.0 + strain) ** (1.0 / 3.0)
+    scaled       = atoms.copy()
     scaled.set_cell(atoms.cell * scale_factor, scale_atoms=True)
 
     volume_calcs[label] = {'structure': orm.StructureData(ase=scaled)}
@@ -336,19 +368,16 @@ stages = [
     # ════════════════════════════════════════════════════════════════════════
 
     # 1. Rough ISIF=3 relax – bring positions and cell to near-equilibrium.
-    #    Loose ediff/ediffg keep it fast; the BM scan and final bulk_relax
-    #    provide increasing levels of convergence.
     {
         'name': 'initial_relax',
         'type': 'vasp',
         'structure_from': 'input',
         'incar': rough_relax_incar,
         'kpoints_spacing': 0.03,
+        'restart': None,
     },
 
     # 2. Static SCF at 7 volume points (-6 % … +6 %)
-    #    Each calculation carries an explicit pre-computed structure (scaled
-    #    from the input cell), so 'structure_from' acts only as a fallback.
     {
         'name': 'volume_scan',
         'type': 'batch',
@@ -367,28 +396,25 @@ stages = [
     },
 
     # 4. Refined BM scan (±2 % / 7 pts around V0) for tighter EOS.
-    #    structure_from='initial_relax' uses the pre-relaxed cell as the
-    #    scaling base, so the refined volume points have the correct shape.
     {
         'name': 'eos_refine',
         'type': 'birch_murnaghan_refine',
         'eos_from': 'eos_fit',
-        'structure_from': 'initial_relax',  # use pre-relaxed cell for scaling
+        'structure_from': 'initial_relax',
         'base_incar': bm_scf_incar,
         'kpoints_spacing': 0.03,
         'refine_strain_range': 0.02,
         'refine_n_points': 7,
     },
 
-    # 5. Full ionic + cell relaxation starting from the BM-recommended structure.
-    #    structure_from='eos_refine' works after the resolve_structure_from fix:
-    #    it wires eos_refine's 'recommend' task output → this stage's input.
+    # 5. Full ionic + cell relaxation at BM-recommended volume.
     {
         'name': 'bulk_relax',
         'type': 'vasp',
-        'structure_from': 'eos_refine',     # ← resolved via 'recommend' task
+        'structure_from': 'eos_refine',
         'incar': bulk_relax_incar,
         'kpoints_spacing': 0.03,
+        'restart': None,
     },
 
     # ════════════════════════════════════════════════════════════════════════
@@ -399,24 +425,23 @@ stages = [
     {
         'name': 'hub_ground_state',
         'type': 'vasp',
-        'structure': split_supercell,   # explicit – bypasses structure_from
+        'structure': split_supercell,
         'incar': {
             **hub_base_incar,
             'nsw': 0,
             'ibrion': -1,
-            # LDAU with zero potential: required so the response calculations
-            # (which do use LDAU) restart from a compatible charge density.
             'ldau': True,
             'ldautype': 3,
-            'ldaul': [2, -1, -1],       # d on perturbed Sn only  [Sn, Sn1, O]
+            'ldaul': [2, -1, -1],
             'ldauu': [0.0, 0.0, 0.0],
             'ldauj': [0.0, 0.0, 0.0],
-            'lorbit': 11,               # orbital projections – mandatory
+            'lorbit': 11,
             'lwave': True,
             'lcharg': True,
         },
         'kpoints_spacing': 0.03,
         'retrieve': ['OUTCAR'],
+        'restart': None,
     },
 
     # 7. Response calculations at 8 perturbation potentials (±0.05 … ±0.20 eV)
@@ -424,7 +449,7 @@ stages = [
         'name': 'hub_response',
         'type': 'hubbard_response',
         'ground_state_from': 'hub_ground_state',
-        'structure_from': 'hub_ground_state',   # supercell (nsw=0 → same as input)
+        'structure_from': 'hub_ground_state',
         'target_species': 'Sn',
         'potential_values': [-0.20, -0.15, -0.10, -0.05, 0.05, 0.10, 0.15, 0.20],
         'ldaul': 2,
@@ -437,26 +462,26 @@ stages = [
         'name': 'hub_analysis',
         'type': 'hubbard_analysis',
         'response_from': 'hub_response',
-        'structure_from': 'hub_ground_state',   # metadata only
+        'structure_from': 'hub_ground_state',
         'target_species': 'Sn',
         'ldaul': 2,
     },
 
     # ════════════════════════════════════════════════════════════════════════
     # PHASE 3 – HYBRID DOS + BAND STRUCTURE (HSE06)
-    # Uses the properly relaxed bulk_relax structure from Phase 1.
     # ════════════════════════════════════════════════════════════════════════
 
-    # 9. GGA PBE static on relaxed structure (saves WAVECAR for optional reuse)
+    # 9. GGA PBE static on relaxed structure
     {
         'name': 'hse_prerelax',
         'type': 'vasp',
         'structure_from': 'bulk_relax',
         'incar': gga_pre_incar,
         'kpoints_spacing': 0.05,
+        'restart': None,
     },
 
-    # 10. HSE06 band structure (zero-weight k-points along high-symmetry path)
+    # 10. HSE06 band structure
     {
         'name': 'hse_bands',
         'type': 'hybrid_bands',
@@ -488,8 +513,7 @@ stages = [
     },
 
     # ════════════════════════════════════════════════════════════════════════
-    # PHASE 4 – SURFACE ENUMERATION (pure Python, no VASP)
-    # Confirms all distinct low-index surfaces of the relaxed structure.
+    # PHASE 4 – SURFACE ENUMERATION (verification, pure Python / no VASP)
     # ════════════════════════════════════════════════════════════════════════
 
     # 12. Enumerate symmetrically distinct surfaces (max_index=1 → 5 for SnO2)
@@ -502,20 +526,20 @@ stages = [
     },
 
     # ════════════════════════════════════════════════════════════════════════
-    # PHASE 5 – SURFACE THERMODYNAMICS FOR SnO2(110)
+    # PHASE 5 – SHARED REFERENCES (start at T=0, independent of Phase 1)
     # ════════════════════════════════════════════════════════════════════════
 
-    # 13. Relax Sn metal reference (independent – starts at T=0)
+    # 13. Relax Sn metal reference
     {
         'name': 'sn_relax',
         'type': 'vasp',
         'structure': ref_sn,
         'incar': sn_relax_incar,
         'kpoints_spacing': 0.03,
+        'restart': None,
     },
 
     # 14. O2 reference energy via water-splitting: E_ref(O2) = E(H2O) - E(H2)
-    #     (independent – starts at T=0 in parallel with volume_scan)
     {
         'name': 'o2_ref',
         'type': 'o2_reference_energy',
@@ -526,30 +550,7 @@ stages = [
         'kpoints': [1, 1, 1],
     },
 
-    # 15. Generate all SnO2(110) slab terminations (18 Å slab, 15 Å vacuum)
-    {
-        'name': 'slab_terms',
-        'type': 'surface_terminations',
-        'structure_from': 'bulk_relax',
-        'miller_indices': SURFACE_MILLER,
-        'min_slab_size': 18.0,
-        'min_vacuum_size': 15.0,
-        'lll_reduce': True,
-        'center_slab': True,
-        'primitive': True,
-        'reorient_lattice': True,
-    },
-
-    # 16. Relax all terminations in parallel (dynamic fan-out)
-    {
-        'name': 'slab_relax',
-        'type': 'dynamic_batch',
-        'structures_from': 'slab_terms',
-        'base_incar': slab_incar,
-        'kpoints_spacing': 0.05,
-    },
-
-    # 17. Formation enthalpy ΔHf(SnO2) from Sn and O2 references
+    # 15. Formation enthalpy ΔHf(SnO2) – shared by all surface_gibbs stages
     {
         'name': 'dhf',
         'type': 'formation_enthalpy',
@@ -560,19 +561,103 @@ stages = [
             'O': 'o2_ref',
         },
     },
-
-    # 18. Surface Gibbs free energies γ(ΔμSn, ΔμO) for each termination
-    {
-        'name': 'surface_gibbs',
-        'type': 'surface_gibbs_energy',
-        'bulk_structure_from': 'bulk_relax',
-        'bulk_energy_from': 'bulk_relax',
-        'slab_structures_from': 'slab_relax',
-        'slab_energies_from': 'slab_relax',
-        'formation_enthalpy_from': 'dhf',
-        'sampling': 100,            # 100×100 chemical-potential grid
-    },
 ]
+
+# ════════════════════════════════════════════════════════════════════════════
+# PHASE 5 (cont.) + PHASE 6 – per-orientation surface thermo + Fukui
+#
+# For each symmetrically distinct Miller index (hkl) we append 7 stages:
+#   slab_terms_{hkl}   – generate all terminations for this orientation
+#   slab_relax_{hkl}   – relax them in parallel (dynamic_batch)
+#   surface_gibbs_{hkl}– compute γ(ΔμSn, ΔμO) for each termination
+#   select_stable_{hkl}– pick the termination with minimum φ at ΔμM=ΔμO=0
+#   fukui_batch_{hkl}  – 4 VASP static SCFs (NELECT = base-1..+2)
+#   fukui_plus_{hkl}   – f+ Fukui function
+#   fukui_minus_{hkl}  – f- Fukui function
+# ════════════════════════════════════════════════════════════════════════════
+
+# Stage counter offset (stages 1–15 defined above)
+_stage_n = 15
+
+for hkl in miller_list:
+    s = hkl_str(hkl)  # e.g. '110'
+    _stage_n += 7
+
+    stages += [
+        # ── Surface terminations ────────────────────────────────────────────
+        {
+            'name': f'slab_terms_{s}',
+            'type': 'surface_terminations',
+            'structure_from': 'bulk_relax',
+            'miller_indices': list(hkl),
+            'min_slab_size': 18.0,
+            'min_vacuum_size': 15.0,
+            'lll_reduce': True,
+            'center_slab': True,
+            'primitive': True,
+            'reorient_lattice': True,
+        },
+
+        # ── Relax all terminations in parallel ──────────────────────────────
+        {
+            'name': f'slab_relax_{s}',
+            'type': 'dynamic_batch',
+            'structures_from': f'slab_terms_{s}',
+            'base_incar': slab_incar,
+            'kpoints_spacing': 0.05,
+        },
+
+        # ── Surface Gibbs free energies γ(ΔμSn, ΔμO) ────────────────────────
+        {
+            'name': f'surface_gibbs_{s}',
+            'type': 'surface_gibbs_energy',
+            'bulk_structure_from': 'bulk_relax',
+            'bulk_energy_from': 'bulk_relax',
+            'slab_structures_from': f'slab_relax_{s}',
+            'slab_energies_from': f'slab_relax_{s}',
+            'formation_enthalpy_from': 'dhf',
+            'sampling': 100,
+        },
+
+        # ── Select most stable termination (min φ at ΔμM=ΔμO=0) ────────────
+        {
+            'name': f'select_stable_{s}',
+            'type': 'select_stable_surface',
+            'summary_from': f'surface_gibbs_{s}',
+            'structures_from': f'slab_relax_{s}',
+        },
+
+        # ── 8 VASP static SCFs (4 for f−, 4 for f+) with fractional NELECT ──
+        {
+            'name': f'fukui_batch_{s}',
+            'type': 'fukui_dynamic',
+            'structure_from': f'select_stable_{s}',
+            'base_incar': fukui_incar,
+            'kpoints_spacing': 0.05,
+            'retrieve': ['CHGCAR'],
+        },
+
+        # ── Fukui f+ (electrophilic susceptibility) ─────────────────────────
+        {
+            'name': f'fukui_plus_{s}',
+            'type': 'fukui_analysis',
+            'batch_from': f'fukui_batch_{s}',
+            'fukui_type': 'plus',
+            'delta_n_map': {'neutral': 0.00, 'delta_005': 0.05, 'delta_010': 0.10, 'delta_015': 0.15},
+        },
+
+        # ── Fukui f− (nucleophilic susceptibility) ──────────────────────────
+        {
+            'name': f'fukui_minus_{s}',
+            'type': 'fukui_analysis',
+            'batch_from': f'fukui_batch_{s}',
+            'fukui_type': 'minus',
+            'delta_n_map': {'neutral': 0.00, 'delta_005': 0.05, 'delta_010': 0.10, 'delta_015': 0.15},
+        },
+    ]
+
+print(f'Total stages: {len(stages)}  '
+      f'({_stage_n} = 15 shared + {len(miller_list)} × 7 per-surface)')
 
 # ---------------------------------------------------------------------------
 # Submit
@@ -581,33 +666,36 @@ if __name__ == '__main__':
     result = quick_vasp_sequential(
         structure=sno2_prim,
         stages=stages,
-        code_label='VASP-VTST-6.4.3@bohr',
-        kpoints_spacing=0.03,       # global default; stages override as needed
+        code_label='VASP-6.5.1-idefix-4@obelix',
+        kpoints_spacing=0.03,
         potential_family='PBE',
         potential_mapping={
-            'Sn':  'Sn_d',          # SnO2 and supercell perturbed Sn
-            'Sn1': 'Sn_d',          # supercell unperturbed Sn (same PP)
+            'Sn':  'Sn_d',
+            'Sn1': 'Sn_d',
             'O':   'O',
-            'H':   'H',             # H2 / H2O for o2_ref
+            'H':   'H',
         },
         options={
             'resources': {
                 'num_machines': 1,
-                'num_cores_per_machine': 40,
+                'num_mpiprocs_per_machine': 4,  # Hybrid MPI+OpenMP: 4 MPI × ~22 OMP on 88 cores
             },
             'custom_scheduler_commands': (
-                '#PBS -q par40\n'
+                '#PBS -l cput=90000:00:00\n'
+                '#PBS -l nodes=1:ppn=88:skylake\n'
                 '#PBS -j oe\n'
                 '#PBS -N sno2_full_workflow\n'
             ),
         },
         max_concurrent_jobs=4,
+        serialize_stages=True,
         name='sno2_full_workflow',
     )
 
     pk = result['__workgraph_pk__']
+    n_stages = len(stages)
     print(f'Submitted WorkGraph PK: {pk}')
-    print(f'Stages: {result["__stage_names__"]}')
+    print(f'Total stages: {n_stages}')
     print()
     print('Monitor:')
     print(f'  verdi process show {pk}')
@@ -618,11 +706,17 @@ if __name__ == '__main__':
     print(f'  print_sequential_results({pk})')
     print()
     print('Key results to look for:')
-    print('  Phase 1 → bulk_relax:         equilibrium structure + energy')
-    print('  Phase 2 → hub_analysis:        Sn-d Hubbard U (eV), R²')
-    print('  Phase 3 → hse_bands/hse_dos:  HSE06 band gap, DOS')
-    print('  Phase 4 → enumerate_surfaces: distinct Miller indices')
-    print('  Phase 5 → surface_gibbs:      γ(ΔμSn, ΔμO) per termination')
+    print('  Phase 1 → bulk_relax:           equilibrium structure + energy')
+    print('  Phase 2 → hub_analysis:          Sn-d Hubbard U (eV), R²')
+    print('  Phase 3 → hse_bands/hse_dos:    HSE06 band gap, DOS')
+    print('  Phase 4 → enumerate_surfaces:   distinct Miller indices')
+    for hkl in miller_list:
+        s = hkl_str(hkl)
+        print(f'  Phase 5/6 ({hkl}):')
+        print(f'    surface_gibbs_{s}:   γ(ΔμSn, ΔμO) per termination')
+        print(f'    select_stable_{s}:   most stable slab (min φ)')
+        print(f'    fukui_plus_{s}:      f+ Fukui function CHGCAR')
+        print(f'    fukui_minus_{s}:     f- Fukui function CHGCAR')
     print()
 
     # Persist PK for later retrieval

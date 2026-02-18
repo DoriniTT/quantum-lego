@@ -8,6 +8,13 @@ Implements the VASP Improved Dimer Method (IDM) transition-state refinement:
 4) Run VASP with IBRION=44
 
 Reference: https://vasp.at/wiki/Improved_dimer_method
+
+Key diagnostic — curvature along the dimer direction (OUTCAR → DIMER METHOD section):
+    negative (all steps)   ✓ saddle point found correctly
+    positive               ✗ algorithm likely landed on a minimum, not a TS
+    oscillating / mixed    ~ not yet converged; check more steps
+VASP docs: "a long sequence of positive numbers usually indicates that the algorithm
+fails to converge to the correct transition state."
 """
 
 from __future__ import annotations
@@ -33,6 +40,30 @@ _MODE_HEADER_RE = re.compile(
     re.IGNORECASE,
 )
 _EIGENVECTOR_HEADER_RE = re.compile(r'^\s*X\s+Y\s+Z\s+dx\s+dy\s+dz\s*$', re.IGNORECASE)
+_CURVATURE_RE = re.compile(
+    r'curvature\s+along\s+(?:the\s+)?dimer\s+direction\s*[=:]\s*'
+    r'([+-]?\d+(?:\.\d+)?(?:[Ee][+-]?\d+)?)',
+    re.IGNORECASE,
+)
+
+# Recommended INCAR defaults for IDM (IBRION=44) stages.
+# These are merged with the user-supplied INCAR, with user values taking precedence.
+#
+# Why these values:
+#   IBRION=44  — activates the improved dimer method (mandatory)
+#   EDIFF=1e-6 — tight electronic convergence ensures accurate forces; 1e-5 is
+#                too loose and can give spurious imaginary modes in the subsequent
+#                frequency calculation
+#   EDIFFG=-0.005 — force convergence threshold; residual forces > ~0.01 eV/Å
+#                   produce spurious imaginary modes in the follow-up IBRION=5
+#                   run (the 45–60 cm⁻¹ "ghost" modes).  0.005 eV/Å is safe.
+#   NSW=200    — enough steps to reach the tight EDIFFG with room to spare
+_IDM_INCAR_DEFAULTS: dict = {
+    'ibrion': 44,
+    'ediff': 1e-6,
+    'ediffg': -0.005,
+    'nsw': 200,
+}
 
 
 def _parse_hardest_imaginary_mode(outcar_content: str, n_atoms: int) -> dict:
@@ -119,6 +150,145 @@ def _parse_hardest_imaginary_mode(outcar_content: str, n_atoms: int) -> dict:
     return max(modes, key=lambda item: abs(item['frequency_cm-1']))
 
 
+def _parse_dimer_curvatures(outcar_content: str) -> list[float]:
+    """Parse all curvature-along-dimer-direction values from OUTCAR.
+
+    Searches the 'DIMER METHOD' section and collects every line of the form:
+        curvature along dimer direction = -0.12
+
+    Returns:
+        List of floats, one per ionic step recorded in OUTCAR.
+        An empty list means the IDM section was not found (calculation may have
+        failed or the OUTCAR is from a different calculation type).
+
+    Diagnostic guidance:
+        - All negative  → correct trajectory toward a saddle point
+        - All positive  → converged to a minimum, not a TS
+        - Mixed / oscillating sign → algorithm not yet converged or failed
+        - Long run of positive values → algorithm failure (bad initial axis)
+    """
+    curvatures: list[float] = []
+    for line in outcar_content.splitlines():
+        m = _CURVATURE_RE.search(line)
+        if m:
+            curvatures.append(float(m.group(1)))
+    return curvatures
+
+
+@task.calcfunction
+def parse_dimer_ts_analysis(retrieved: orm.FolderData) -> orm.Dict:
+    """Parse the IDM OUTCAR and return a TS-quality summary as an AiiDA Dict.
+
+    Output keys:
+        curvatures         list[float]  — all values of curvature along dimer direction
+        final_curvature    float        — last recorded curvature
+        n_negative         int          — steps with curvature < 0 (good)
+        n_positive         int          — steps with curvature >= 0 (bad)
+        n_steps            int          — total steps recorded
+        saddle_point_status  str        — "confirmed" | "uncertain" | "failed"
+        assessment         str          — human-readable one-liner
+
+    Status logic:
+        confirmed  → all curvatures negative (stable saddle point)
+        uncertain  → mixed sign (not fully converged or borderline)
+        failed     → all curvatures positive (landed on minimum, not TS)
+    """
+    try:
+        content = retrieved.get_object_content('OUTCAR')
+    except Exception:
+        return orm.Dict(dict={
+            'curvatures': [], 'final_curvature': None,
+            'n_negative': 0, 'n_positive': 0, 'n_steps': 0,
+            'saddle_point_status': 'unknown',
+            'assessment': 'OUTCAR not available',
+        })
+
+    text = content.decode(errors='replace') if isinstance(content, bytes) else str(content)
+    curvatures = _parse_dimer_curvatures(text)
+
+    if not curvatures:
+        return orm.Dict(dict={
+            'curvatures': [], 'final_curvature': None,
+            'n_negative': 0, 'n_positive': 0, 'n_steps': 0,
+            'saddle_point_status': 'unknown',
+            'assessment': 'No DIMER METHOD section found in OUTCAR',
+        })
+
+    n_neg = sum(1 for c in curvatures if c < 0)
+    n_pos = sum(1 for c in curvatures if c >= 0)
+    final = curvatures[-1]
+
+    if n_pos == 0:
+        status = 'confirmed'
+        assessment = f'All {len(curvatures)} steps negative (final={final:+.4f}) — stable saddle point \u2713'
+    elif n_neg == 0:
+        status = 'failed'
+        assessment = f'All {len(curvatures)} steps positive (final={final:+.4f}) — algorithm converged to a minimum, not a TS \u2717'
+    else:
+        status = 'uncertain'
+        assessment = f'Mixed sign ({n_neg} neg / {n_pos} pos, final={final:+.4f}) — not fully converged or borderline'
+
+    return orm.Dict(dict={
+        'curvatures': curvatures,
+        'final_curvature': final,
+        'n_negative': n_neg,
+        'n_positive': n_pos,
+        'n_steps': len(curvatures),
+        'saddle_point_status': status,
+        'assessment': assessment,
+    })
+
+
+@task.calcfunction
+def extract_structure_from_contcar(retrieved: orm.FolderData) -> orm.StructureData:
+    """Read CONTCAR from a dimer retrieved folder, strip the dimer axis lines,
+    and return a clean StructureData suitable as input for subsequent calculations.
+
+    The VASP dimer CONTCAR looks like a normal POSCAR but has extra lines after
+    the coordinates (blank line + one line per atom with dx dy dz components).
+    ASE and pymatgen do not handle these extra lines; this function strips them
+    before parsing so the structure is correctly imported into AiiDA.
+    """
+    import io
+    from ase.io import read as ase_read
+
+    try:
+        content = retrieved.get_object_content('CONTCAR')
+    except Exception as exc:
+        raise ValueError(
+            "CONTCAR not found in dimer retrieved folder."
+        ) from exc
+
+    text = content.decode(errors='replace') if isinstance(content, bytes) else str(content)
+
+    # POSCAR/CONTCAR: header(1) + scale(1) + lattice(3) + species_names(1) +
+    # species_counts(1) + [Selective dynamics(1)?] + coord_type(1) + N coord lines
+    # Then (optionally) blank line + N velocity/dimer-axis lines.
+    # We keep only the first 8 + N_atoms lines (plus optional 'Selective dynamics' line).
+    lines = text.splitlines()
+
+    # Parse number of atoms from line 6 (0-indexed: line 5 = species counts)
+    n_atoms = 0
+    try:
+        counts_line = lines[6]
+        n_atoms = sum(int(x) for x in counts_line.split())
+    except Exception:
+        pass
+
+    # Detect optional "Selective dynamics" line (line index 7)
+    selective_dynamics_offset = 0
+    if n_atoms > 0 and len(lines) > 7 and lines[7].strip().lower().startswith('s'):
+        selective_dynamics_offset = 1
+
+    # Number of lines to keep: 8 standard header lines + optional SD + N coord lines
+    keep = 8 + selective_dynamics_offset + n_atoms
+    clean_lines = lines[:keep]
+    clean_text = '\n'.join(clean_lines) + '\n'
+
+    atoms = ase_read(io.StringIO(clean_text), format='vasp')
+    return orm.StructureData(ase=atoms)
+
+
 @task.calcfunction
 def inject_dimer_axis_prepend_text(
     options: orm.Dict,
@@ -154,6 +324,54 @@ def inject_dimer_axis_prepend_text(
     else:
         opts['prepend_text'] = block
 
+    return orm.Dict(dict=opts)
+
+
+@task.calcfunction
+def inject_contcar_axis_prepend_text(
+    options: orm.Dict,
+    retrieved: orm.FolderData,
+) -> orm.Dict:
+    """Return options dict with prepend_text that re-appends the dimer axis from CONTCAR to POSCAR.
+
+    VASP writes the dimer direction as extra lines after the coordinate block in CONTCAR
+    (blank line then one 3-component vector per atom).  ASE strips these when converting
+    to StructureData, so subsequent stages (e.g. vib_verify with IBRION=5) do not have them.
+    This calcfunction reads the extra lines and adds ``echo "..." >> POSCAR`` commands to
+    ``options.prepend_text`` so the file is restored before VASP starts.
+    """
+    opts = dict(options.get_dict() or {})
+
+    try:
+        content = retrieved.get_object_content('CONTCAR')
+    except Exception:
+        return orm.Dict(dict=opts)  # CONTCAR absent — pass unchanged
+
+    text = content.decode(errors='replace') if isinstance(content, bytes) else str(content)
+    lines = text.splitlines()
+
+    try:
+        n_atoms = sum(int(x) for x in lines[6].split())
+    except (IndexError, ValueError):
+        return orm.Dict(dict=opts)
+
+    # Coord section starts at index 8; shift by 1 if Selective Dynamics is present
+    coord_start = 8
+    if len(lines) > 7 and lines[7].strip().lower().startswith('s'):
+        coord_start = 9
+
+    blank_idx = coord_start + n_atoms
+    if blank_idx >= len(lines) or lines[blank_idx].strip():
+        return orm.Dict(dict=opts)  # no blank line → no extra axis lines
+
+    axis_lines = [ln.strip() for ln in lines[blank_idx + 1:] if ln.strip()]
+    if not axis_lines:
+        return orm.Dict(dict=opts)
+
+    commands = ['echo "" >> POSCAR'] + [f'echo "{al}" >> POSCAR' for al in axis_lines]
+    block = '\n'.join(commands)
+    existing = opts.get('prepend_text') or ''
+    opts['prepend_text'] = f'{existing.rstrip()}\n{block}' if existing else block
     return orm.Dict(dict=opts)
 
 
@@ -292,8 +510,10 @@ def create_stage_tasks(
         prev_stage_type = stage_types[prev_name]
         if prev_stage_type in ('dos', 'batch', 'bader'):
             stage_structure = stage_tasks[prev_name]['structure']
-        elif prev_stage_type in ('vasp', 'dimer', 'aimd'):
+        elif prev_stage_type in ('vasp', 'aimd'):
             stage_structure = stage_tasks[prev_name]['vasp'].outputs.structure
+        elif prev_stage_type == 'dimer':
+            stage_structure = stage_tasks[prev_name]['contcar_structure'].outputs.result
         elif prev_stage_type == 'neb':
             stage_structure = stage_tasks[prev_name]['neb'].outputs.structure
         else:
@@ -346,8 +566,9 @@ def create_stage_tasks(
         if i == 0 and 'structure' not in stage and stage.get('structure_from') is None:
             stage_structure = restart_structure
 
-    # Prepare builder inputs
-    stage_incar = stage['incar']
+    # Apply IDM INCAR defaults (user values take precedence)
+    from ..common.utils import deep_merge_dicts
+    stage_incar = deep_merge_dicts(_IDM_INCAR_DEFAULTS, stage['incar'])
     stage_kpoints_spacing = stage.get('kpoints_spacing', kpoints_spacing)
     stage_kpoints_mesh = stage.get('kpoints', None)
     stage_retrieve = stage.get('retrieve', None)
@@ -446,12 +667,29 @@ def create_stage_tasks(
         retrieved=vasp_task.outputs.retrieved,
     )
 
+    # Extract clean structure from CONTCAR (strips dimer axis lines) so
+    # subsequent stages (e.g. vib_verify) receive a proper StructureData.
+    contcar_structure_task = wg.add_task(
+        extract_structure_from_contcar,
+        name=f'contcar_structure_{stage_name}',
+        retrieved=vasp_task.outputs.retrieved,
+    )
+
+    # Parse TS quality summary from IDM OUTCAR (curvature along dimer direction)
+    ts_analysis_task = wg.add_task(
+        parse_dimer_ts_analysis,
+        name=f'ts_analysis_{stage_name}',
+        retrieved=vasp_task.outputs.retrieved,
+    )
+
     return {
         'vasp': vasp_task,
         'energy': energy_task,
         'supercell': supercell_task,
         'input_structure': stage_structure,
         'injected_options': injected_options,
+        'contcar_structure': contcar_structure_task,
+        'ts_analysis': ts_analysis_task,
     }
 
 
@@ -464,20 +702,26 @@ def expose_stage_outputs(
     """Expose dimer stage outputs on the WorkGraph."""
     vasp_task = stage_tasks_result['vasp']
     energy_task = stage_tasks_result['energy']
+    contcar_task = stage_tasks_result['contcar_structure']
+    ts_analysis_task = stage_tasks_result['ts_analysis']
 
     if namespace_map is not None:
         ns = namespace_map['main']
         setattr(wg.outputs, f'{ns}.dimer.energy', energy_task.outputs.result)
         setattr(wg.outputs, f'{ns}.dimer.structure', vasp_task.outputs.structure)
+        setattr(wg.outputs, f'{ns}.dimer.contcar_structure', contcar_task.outputs.result)
         setattr(wg.outputs, f'{ns}.dimer.misc', vasp_task.outputs.misc)
         setattr(wg.outputs, f'{ns}.dimer.remote', vasp_task.outputs.remote_folder)
         setattr(wg.outputs, f'{ns}.dimer.retrieved', vasp_task.outputs.retrieved)
+        setattr(wg.outputs, f'{ns}.dimer.ts_analysis', ts_analysis_task.outputs.result)
     else:
         setattr(wg.outputs, f'{stage_name}_energy', energy_task.outputs.result)
         setattr(wg.outputs, f'{stage_name}_structure', vasp_task.outputs.structure)
+        setattr(wg.outputs, f'{stage_name}_contcar_structure', contcar_task.outputs.result)
         setattr(wg.outputs, f'{stage_name}_misc', vasp_task.outputs.misc)
         setattr(wg.outputs, f'{stage_name}_remote', vasp_task.outputs.remote_folder)
         setattr(wg.outputs, f'{stage_name}_retrieved', vasp_task.outputs.retrieved)
+        setattr(wg.outputs, f'{stage_name}_ts_analysis', ts_analysis_task.outputs.result)
 
 
 def get_stage_results(
@@ -492,9 +736,12 @@ def get_stage_results(
     result: dict[str, Any] = {
         'energy': None,
         'structure': None,
+        'contcar_structure': None,
         'misc': None,
         'remote': None,
         'files': None,
+        'dimer_curvatures': [],
+        'ts_analysis': None,
         'pk': wg_pk,
         'stage': stage_name,
         'type': 'dimer',
@@ -513,6 +760,8 @@ def get_stage_results(
                     result['energy'] = energy_node.value if hasattr(energy_node, 'value') else float(energy_node)
                 if hasattr(brick_ns, 'structure'):
                     result['structure'] = brick_ns.structure
+                if hasattr(brick_ns, 'contcar_structure'):
+                    result['contcar_structure'] = brick_ns.contcar_structure
                 if hasattr(brick_ns, 'misc'):
                     misc_node = brick_ns.misc
                     if hasattr(misc_node, 'get_dict'):
@@ -521,6 +770,10 @@ def get_stage_results(
                     result['remote'] = brick_ns.remote
                 if hasattr(brick_ns, 'retrieved'):
                     result['files'] = brick_ns.retrieved
+                if hasattr(brick_ns, 'ts_analysis'):
+                    ts_node = brick_ns.ts_analysis
+                    if hasattr(ts_node, 'get_dict'):
+                        result['ts_analysis'] = ts_node.get_dict()
         else:
             energy_attr = f'{stage_name}_energy'
             if hasattr(outputs, energy_attr):
@@ -530,6 +783,10 @@ def get_stage_results(
             struct_attr = f'{stage_name}_structure'
             if hasattr(outputs, struct_attr):
                 result['structure'] = getattr(outputs, struct_attr)
+
+            contcar_attr = f'{stage_name}_contcar_structure'
+            if hasattr(outputs, contcar_attr):
+                result['contcar_structure'] = getattr(outputs, contcar_attr)
 
             misc_attr = f'{stage_name}_misc'
             if hasattr(outputs, misc_attr):
@@ -545,11 +802,26 @@ def get_stage_results(
             if hasattr(outputs, retrieved_attr):
                 result['files'] = getattr(outputs, retrieved_attr)
 
+            ts_attr = f'{stage_name}_ts_analysis'
+            if hasattr(outputs, ts_attr):
+                ts_node = getattr(outputs, ts_attr)
+                if hasattr(ts_node, 'get_dict'):
+                    result['ts_analysis'] = ts_node.get_dict()
+
     if result['energy'] is None or result['misc'] is None:
         _extract_sequential_stage_from_workgraph(wg_node, stage_name, result)
 
     if result['energy'] is None and result['misc'] is not None:
         result['energy'] = _extract_energy_from_misc(result['misc'])
+
+    # Parse dimer curvatures from retrieved OUTCAR
+    if result['files'] is not None:
+        try:
+            content = result['files'].get_object_content('OUTCAR')
+            outcar_text = content.decode(errors='replace') if isinstance(content, bytes) else str(content)
+            result['dimer_curvatures'] = _parse_dimer_curvatures(outcar_text)
+        except Exception:
+            pass
 
     return result  # type: ignore[return-value]
 
@@ -621,6 +893,35 @@ def print_stage_results(index: int, stage_name: str, stage_result: Dict[str, Any
         max_force = misc.get('maximum_force', None)
         force_str = f", max_force: {max_force:.4f} eV/Å" if max_force else ""
         console.print(f"      [bold]Status:[/bold] {run_status}{force_str}")
+
+    # TS analysis from AiiDA node (preferred) or fallback to raw curvature list
+    ts_analysis = stage_result.get('ts_analysis')
+    curvatures = stage_result.get('dimer_curvatures') or []
+
+    if ts_analysis:
+        status = ts_analysis.get('saddle_point_status', 'unknown')
+        color = {'confirmed': 'green', 'failed': 'red', 'uncertain': 'yellow'}.get(status, 'dim')
+        console.print(f"      [bold]TS status:[/bold] [{color}]{ts_analysis.get('assessment', status)}[/{color}]")
+        if ts_analysis.get('final_curvature') is not None:
+            final = ts_analysis['final_curvature']
+            n_neg = ts_analysis.get('n_negative', 0)
+            n_pos = ts_analysis.get('n_pos', ts_analysis.get('n_positive', 0))
+            console.print(
+                f"      [bold]Dimer curvature:[/bold] final=[{color}]{final:+.4f}[/{color}]"
+                f"  ({n_neg} neg / {n_pos} pos over {ts_analysis.get('n_steps', 0)} steps)"
+            )
+    elif curvatures:
+        last = curvatures[-1]
+        n_neg = sum(1 for c in curvatures if c < 0)
+        n_pos = sum(1 for c in curvatures if c >= 0)
+        sign_summary = 'all negative ✓' if n_pos == 0 else ('all positive ✗' if n_neg == 0 else f'{n_neg} neg / {n_pos} pos')
+        color = 'green' if n_pos == 0 else 'red'
+        console.print(
+            f"      [bold]Dimer curvature:[/bold] [{color}]{last:.4f}[/{color}]"
+            f" ({sign_summary}, {len(curvatures)} steps)"
+        )
+    else:
+        console.print("      [bold]Dimer curvature:[/bold] [dim]not available[/dim]")
 
     if stage_result.get('remote') is not None:
         console.print(f"      [bold]Remote folder:[/bold] PK [pk]{stage_result['remote'].pk}[/pk]")
