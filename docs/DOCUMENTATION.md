@@ -587,38 +587,73 @@ Nudged Elastic Band calculations for reaction pathways.
 graph LR
     A[Initial State] --> B[Generate Images]
     C[Final State] --> B
-    B --> D[NEB Brick]
-    D --> E[Reaction Path]
-    D --> F[Barrier]
+    B --> D[NEB stage1]
+    D --> E[CI-NEB restart]
+    E --> F[Barrier / TS Structure]
 
     style B fill:#607D8B
     style D fill:#455A64
+    style E fill:#37474F
 ```
 
 **Use cases:** Transition state search, reaction barrier calculations, diffusion pathways
 
-**Example:**
+**Image generation** uses a single `generate_neb_images_all` calcfunction that
+interpolates *all* intermediate images at once (IDPP or linear) and stores them
+as individual `StructureData` outputs (`image_01`, `image_02`, …).  This is more
+efficient than per-image calcfunctions and plays well with WorkGraph serialisation.
+
+**CI-NEB two-stage pattern** — run a regular NEB first, then restart with
+`LCLIMB=True`.  Use the `restart` key to point to the first NEB stage; the brick
+will copy the `WAVECAR`/image `CONTCAR` files automatically.
+
+> **Note:** `LCLIMB` is stripped from the INCAR massager and injected via
+> `prepend_text` (`echo LCLIMB=.TRUE. >> INCAR`), because `aiida-vasp` rejects
+> unknown INCAR tags.  You do not need to work around this manually.
+
+**Image source options** — exactly one of these must be set on a `neb` stage:
+
+| Key | Description |
+|---|---|
+| `images_from` | Name of a preceding `generate_neb_images` stage |
+| `images_dir` | Path to a directory containing `0N/POSCAR` files |
+
+**Example (regular NEB → CI-NEB):**
 ```python
 stages = [
     {'name': 'relax_initial', 'type': 'vasp', 'structure': initial, ...},
-    {'name': 'relax_final', 'type': 'vasp', 'structure': final, ...},
+    {'name': 'relax_final',   'type': 'vasp', 'structure': final,   ...},
     {
         'name': 'make_images',
         'type': 'generate_neb_images',
         'initial_from': 'relax_initial',
         'final_from': 'relax_final',
         'n_images': 5,
+        'method': 'idpp',   # or 'linear'
+        'mic': True,
     },
     {
-        'name': 'neb',
+        'name': 'neb_stage1',
         'type': 'neb',
         'initial_from': 'relax_initial',
         'final_from': 'relax_final',
         'images_from': 'make_images',
-        'incar': {'IBRION': 3, 'IOPT': 3, 'SPRING': -5},
+        'incar': {'IBRION': 3, 'POTIM': 0, 'IOPT': 3, 'SPRING': -5, 'LCLIMB': False},
+    },
+    {
+        'name': 'neb_cineb',
+        'type': 'neb',
+        'initial_from': 'relax_initial',
+        'final_from': 'relax_final',
+        'images_from': 'make_images',
+        'restart': 'neb_stage1',   # copies WAVECAR + CONTCAR from stage 4
+        'incar': {'IBRION': 3, 'POTIM': 0, 'IOPT': 3, 'SPRING': -5, 'LCLIMB': True},
     },
 ]
 ```
+
+See `examples/06_surface/neb_pt_step_edge.py` for a complete working example
+(N diffusion on a Pt(211) step edge, 5 images, VTST FIRE optimiser).
 
 ### 10. QE Brick (`qe`)
 
@@ -1198,52 +1233,81 @@ result = quick_vasp_sequential(
 )
 ```
 
-### Example 4: NEB Calculation
+### Example 4: NEB Calculation (N diffusion on Pt step edge)
+
+Full two-stage NEB (regular NEB → CI-NEB) for N diffusion on a Pt(211) step
+edge.  Requires VASP with the VTST patch.
 
 ```python
+from pathlib import Path
+from ase.io import read
+from aiida import orm
+from quantum_lego import quick_vasp_sequential
+
+initial_structure = orm.StructureData(ase=read('n_pt_step_initial.vasp'))
+final_structure   = orm.StructureData(ase=read('n_pt_step_final.vasp'))
+
+COMMON_INCAR = {'encut': 400, 'ediff': 1e-5, 'prec': 'Normal', 'lwave': True, 'lcharg': False}
+NEB_INCAR    = {**COMMON_INCAR, 'ibrion': 3, 'potim': 0, 'iopt': 3, 'spring': -5,
+                'ediffg': -0.1, 'nsw': 500, 'ismear': 1, 'sigma': 0.1, 'algo': 'Fast'}
+
 stages = [
     # Relax endpoints
-    {'name': 'relax_initial', 'type': 'vasp', 'structure': initial,
-     'incar': {'NSW': 100, 'IBRION': 2, 'ENCUT': 400}},
-    {'name': 'relax_final', 'type': 'vasp', 'structure': final,
-     'incar': {'NSW': 100, 'IBRION': 2, 'ENCUT': 400}},
+    {'name': 'relax_initial', 'type': 'vasp',
+     'incar': {**COMMON_INCAR, 'ibrion': 2, 'isif': 2, 'nsw': 200, 'ediffg': -0.05}},
+    {'name': 'relax_final',   'type': 'vasp', 'structure': final_structure,
+     'incar': {**COMMON_INCAR, 'ibrion': 2, 'isif': 2, 'nsw': 200, 'ediffg': -0.05}},
 
-    # Generate images
+    # Interpolate 5 images with IDPP
     {
         'name': 'make_images',
         'type': 'generate_neb_images',
         'initial_from': 'relax_initial',
         'final_from': 'relax_final',
-        'n_images': 7,  # 7 intermediate images
+        'n_images': 5,
+        'method': 'idpp',
+        'mic': True,
     },
 
-    # Run NEB
+    # Regular NEB (no climbing image)
     {
-        'name': 'neb',
+        'name': 'neb_stage1',
         'type': 'neb',
         'initial_from': 'relax_initial',
         'final_from': 'relax_final',
         'images_from': 'make_images',
-        'incar': {
-            'IBRION': 3,
-            'IOPT': 3,
-            'NSW': 200,
-            'SPRING': -5,
-            'ENCUT': 400,
-        },
+        'incar': {**NEB_INCAR, 'LCLIMB': False},
+        'options': {'resources': {'num_machines': 3, 'num_cores_per_machine': 40}},
+    },
+
+    # CI-NEB restart from stage 4
+    {
+        'name': 'neb_cineb',
+        'type': 'neb',
+        'initial_from': 'relax_initial',
+        'final_from': 'relax_final',
+        'images_from': 'make_images',
+        'restart': 'neb_stage1',
+        'incar': {**NEB_INCAR, 'LCLIMB': True, 'ediffg': -0.05},
+        'options': {'resources': {'num_machines': 3, 'num_cores_per_machine': 40}},
     },
 ]
 
 result = quick_vasp_sequential(
-    structure=initial,
+    structure=initial_structure,
     stages=stages,
-    code_label='VASP-6.5.1@localwork',
+    code_label='VASP-VTST-6.4.3@bohr',
+    kpoints_spacing=0.06,
     potential_family='PBE',
-    potential_mapping={'O': 'O'},
-    options={'resources': {'num_machines': 1, 'num_mpiprocs_per_machine': 8}},
-    name='neb_diffusion',
+    potential_mapping={'Pt': 'Pt', 'N': 'N'},
+    options={'resources': {'num_machines': 1, 'num_cores_per_machine': 40}},
+    max_concurrent_jobs=4,
+    name='n_pt_step_neb',
 )
 ```
+
+See `examples/06_surface/neb_pt_step_edge.py` for the full runnable script
+including structure generation.
 
 ---
 
