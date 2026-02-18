@@ -78,36 +78,59 @@ def create_stage_tasks(wg, stage, stage_name, context):
 
     batch_from = stage['batch_from']
     ref_stage_type = stage_types.get(batch_from, 'vasp')
-    if ref_stage_type != 'batch':
-        raise ValueError(
-            f"Fukui analysis stage '{stage_name}' batch_from='{batch_from}' "
-            f"must reference a batch stage (got type='{ref_stage_type}')"
-        )
-
-    batch_result = stage_tasks[batch_from]
-    calc_tasks = batch_result.get('calc_tasks')
-    if not calc_tasks:
-        raise ValueError(
-            f"Fukui analysis stage '{stage_name}': stage '{batch_from}' "
-            f"does not have batch calc_tasks"
-        )
 
     # Use ascending delta_n so generated CHGCAR filenames match CHGCAR_0.00, ...
     sorted_items = sorted(
         ((label, float(delta_n)) for label, delta_n in stage['delta_n_map'].items()),
         key=lambda item: item[1],
     )
-
-    missing_labels = [label for label, _ in sorted_items if label not in calc_tasks]
-    if missing_labels:
-        raise ValueError(
-            f"Fukui analysis stage '{stage_name}': labels {missing_labels} "
-            f"not found in batch stage '{batch_from}' calculations"
-        )
-
     labels = [item[0] for item in sorted_items]
     delta_n_values = [item[1] for item in sorted_items]
-    retrieved_sockets = [calc_tasks[label].outputs.retrieved for label in labels]
+
+    if ref_stage_type == 'batch':
+        batch_result = stage_tasks[batch_from]
+        calc_tasks = batch_result.get('calc_tasks')
+        if not calc_tasks:
+            raise ValueError(
+                f"Fukui analysis stage '{stage_name}': stage '{batch_from}' "
+                f"does not have batch calc_tasks"
+            )
+        missing_labels = [lbl for lbl in labels if lbl not in calc_tasks]
+        if missing_labels:
+            raise ValueError(
+                f"Fukui analysis stage '{stage_name}': labels {missing_labels} "
+                f"not found in batch stage '{batch_from}' calculations"
+            )
+        retrieved_sockets = [calc_tasks[lbl].outputs.retrieved for lbl in labels]
+
+    elif ref_stage_type == 'fukui_dynamic':
+        # fukui_dynamic exposes 8 sockets: retrieved_{minus,plus}_{neutral,delta_005,...}
+        # delta_n_map keys must be exactly the four fractional-offset labels.
+        expected_labels = {'neutral', 'delta_005', 'delta_010', 'delta_015'}
+        provided_labels = set(stage['delta_n_map'].keys())
+        if provided_labels != expected_labels:
+            raise ValueError(
+                f"Fukui analysis stage '{stage_name}': when batch_from references "
+                f"a fukui_dynamic stage, delta_n_map keys must be exactly "
+                f"{sorted(expected_labels)}, got {sorted(provided_labels)}"
+            )
+        fukui_type = stage['fukui_type']  # 'plus' or 'minus'
+        dyn_result = stage_tasks[batch_from]
+        socket_keys = [f'retrieved_{fukui_type}_{lbl}' for lbl in labels]
+        missing = [k for k in socket_keys if k not in dyn_result]
+        if missing:
+            raise ValueError(
+                f"Fukui analysis stage '{stage_name}': fukui_dynamic stage "
+                f"'{batch_from}' is missing output sockets: {missing}"
+            )
+        retrieved_sockets = [dyn_result[k] for k in socket_keys]
+
+    else:
+        raise ValueError(
+            f"Fukui analysis stage '{stage_name}' batch_from='{batch_from}' "
+            f"must reference a 'batch' or 'fukui_dynamic' stage "
+            f"(got type='{ref_stage_type}')"
+        )
 
     collect_task = wg.add_task(
         collect_chgcar_files_internal,

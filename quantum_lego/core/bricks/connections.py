@@ -144,6 +144,10 @@ DIMER_PORTS = {
             'type': 'retrieved',
             'description': 'Retrieved files from cluster (includes POSCAR with dimer axis)',
         },
+        'contcar_structure': {
+            'type': 'structure',
+            'description': 'Clean structure from CONTCAR (dimer axis lines stripped); use this as input for subsequent stages',
+        },
     },
 }
 
@@ -237,11 +241,11 @@ FUKUI_ANALYSIS_PORTS = {
             'type': 'retrieved',
             'required': True,
             'source': 'batch_from',
-            'compatible_bricks': ['batch'],
+            'compatible_bricks': ['batch', 'fukui_dynamic'],
             'prerequisites': {
                 'retrieve': ['CHGCAR'],
             },
-            'description': 'Retrieved folders from batch stage (must contain CHGCAR)',
+            'description': 'Retrieved folders from batch or fukui_dynamic stage (must contain CHGCAR)',
         },
     },
     'outputs': {
@@ -249,6 +253,52 @@ FUKUI_ANALYSIS_PORTS = {
             'type': 'file',
             'description': 'Interpolated Fukui function (CHGCAR_FUKUI.vasp)',
         },
+    },
+}
+
+SELECT_STABLE_SURFACE_PORTS = {
+    'inputs': {
+        'structures': {
+            'type': 'structures',
+            'required': True,
+            'source': 'structures_from',
+            'compatible_bricks': ['dynamic_batch'],
+            'description': 'Relaxed slab structures from dynamic_batch stage',
+        },
+        'summary': {
+            'type': 'misc',
+            'required': True,
+            'source': 'summary_from',
+            'compatible_bricks': ['surface_gibbs_energy'],
+            'description': 'Surface Gibbs energy summary from surface_gibbs_energy stage',
+        },
+    },
+    'outputs': {
+        'structure': {
+            'type': 'structure',
+            'description': 'Relaxed slab with minimum φ at ΔμM=0, ΔμO=0',
+        },
+    },
+}
+
+FUKUI_DYNAMIC_PORTS = {
+    'inputs': {
+        'structure': {
+            'type': 'structure',
+            'required': True,
+            'source': 'auto',
+            'description': 'Slab structure for Fukui calculations (NELECT computed at runtime)',
+        },
+    },
+    'outputs': {
+        'retrieved_minus_neutral':   {'type': 'retrieved', 'description': 'f− neutral  (dN = 0.00)'},
+        'retrieved_minus_delta_005': {'type': 'retrieved', 'description': 'f− dN = −0.05'},
+        'retrieved_minus_delta_010': {'type': 'retrieved', 'description': 'f− dN = −0.10'},
+        'retrieved_minus_delta_015': {'type': 'retrieved', 'description': 'f− dN = −0.15'},
+        'retrieved_plus_neutral':    {'type': 'retrieved', 'description': 'f+ neutral  (dN = 0.00)'},
+        'retrieved_plus_delta_005':  {'type': 'retrieved', 'description': 'f+ dN = +0.05'},
+        'retrieved_plus_delta_010':  {'type': 'retrieved', 'description': 'f+ dN = +0.10'},
+        'retrieved_plus_delta_015':  {'type': 'retrieved', 'description': 'f+ dN = +0.15'},
     },
 }
 
@@ -908,6 +958,8 @@ ALL_PORTS = {
     'formation_enthalpy': FORMATION_ENTHALPY_PORTS,
     'o2_reference_energy': O2_REFERENCE_ENERGY_PORTS,
     'surface_gibbs_energy': SURFACE_GIBBS_ENERGY_PORTS,
+    'select_stable_surface': SELECT_STABLE_SURFACE_PORTS,
+    'fukui_dynamic': FUKUI_DYNAMIC_PORTS,
 }
 
 

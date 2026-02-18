@@ -16,6 +16,29 @@ from ..tasks import compute_dynamics
 from ..types import StageContext, StageTasksResult, VaspResults
 
 
+# Recommended INCAR defaults for vibrational analysis (IBRION=5) stages.
+# Merged with user-supplied INCAR; user values always take precedence.
+#
+# Why these values:
+#   EDIFF=1e-6  — tight electronic convergence is needed to get accurate
+#                 forces for reliable mode frequencies; 1e-5 can produce
+#                 spurious low-frequency imaginary modes
+#   NFREE=2     — central differences (more accurate than forward differences)
+#   POTIM=0.02  — displacement step in Å; 0.02 is a good default for most
+#                 systems (reduce to 0.01–0.015 for soft/floppy modes)
+#   NSW=1       — single SCF + finite-difference displacements (standard for IBRION=5)
+#   NWRITE=3    — write eigenvectors after division by SQRT(mass); required if
+#                 OUTCAR is used as input for a subsequent dimer calculation
+_VIB_INCAR_DEFAULTS: dict = {
+    'ibrion': 5,
+    'ediff': 1e-6,
+    'nfree': 2,
+    'potim': 0.02,
+    'nsw': 1,
+    'nwrite': 3,
+}
+
+
 def validate_stage(stage: Dict[str, Any], stage_names: Set[str]) -> None:
     """Validate a VASP stage configuration.
 
@@ -150,8 +173,11 @@ def create_stage_tasks(
         prev_stage_type = stage_types[prev_name]
         if prev_stage_type in ('dos', 'batch', 'bader'):
             stage_structure = stage_tasks[prev_name]['structure']
-        elif prev_stage_type in ('vasp', 'dimer', 'aimd'):
+        elif prev_stage_type in ('vasp', 'aimd'):
             stage_structure = stage_tasks[prev_name]['vasp'].outputs.structure
+        elif prev_stage_type == 'dimer':
+            # Use clean CONTCAR structure from the dimer stage
+            stage_structure = stage_tasks[prev_name]['contcar_structure'].outputs.result
         elif prev_stage_type == 'neb':
             stage_structure = stage_tasks[prev_name]['neb'].outputs.structure
         else:
@@ -202,7 +228,13 @@ def create_stage_tasks(
             stage_structure = restart_structure
 
     # Prepare builder inputs for this stage
-    stage_incar = stage['incar']
+    # Apply vibrational defaults when IBRION=5 (user values take precedence)
+    raw_incar = stage['incar']
+    if int(raw_incar.get('ibrion', -1)) == 5:
+        from ..common.utils import deep_merge_dicts
+        stage_incar = deep_merge_dicts(_VIB_INCAR_DEFAULTS, raw_incar)
+    else:
+        stage_incar = raw_incar
     stage_kpoints_spacing = stage.get('kpoints_spacing', kpoints_spacing)
     stage_kpoints_mesh = stage.get('kpoints', None)
     stage_retrieve = stage.get('retrieve', None)
@@ -257,6 +289,29 @@ def create_stage_tasks(
             fix_elements=orm.List(list=stage_fix_elements) if stage_fix_elements else None,
         )
 
+    # If structure comes from a dimer stage, re-inject its CONTCAR axis lines into POSCAR.
+    # VASP writes the dimer direction as extra lines in CONTCAR (for IBRION=44 restart and
+    # IBRION=5 verification), but ASE strips them when converting to StructureData.
+    dimer_source_name = None
+    structure_from_key = stage.get('structure_from', 'previous')
+    if structure_from_key == 'previous' and i > 0:
+        prev_name = stage_names[i - 1]
+        if stage_types.get(prev_name) == 'dimer':
+            dimer_source_name = prev_name
+    elif structure_from_key not in ('previous', 'input') and stage_types.get(structure_from_key) == 'dimer':
+        dimer_source_name = structure_from_key
+
+    if dimer_source_name is not None:
+        from .dimer import inject_contcar_axis_prepend_text
+        dimer_retrieved = stage_tasks[dimer_source_name]['vasp'].outputs.retrieved
+        contcar_opts_task = wg.add_task(
+            inject_contcar_axis_prepend_text,
+            name=f'contcar_axis_{stage_name}',
+            options=builder_inputs['options'],
+            retrieved=dimer_retrieved,
+        )
+        builder_inputs['options'] = contcar_opts_task.outputs.result
+
     # Add VASP task
     vasp_task_kwargs = {
         'name': f'vasp_{stage_name}',
@@ -291,11 +346,23 @@ def create_stage_tasks(
         retrieved=vasp_task.outputs.retrieved,
     )
 
+    # For vibrational analysis stages (IBRION=5), add a task that parses
+    # imaginary modes from OUTCAR and produces an AiiDA Dict with TS diagnostics.
+    vibrational_modes_task = None
+    if int(stage_incar.get('ibrion', -1)) == 5:
+        from .vibrational_utils import parse_vibrational_modes
+        vibrational_modes_task = wg.add_task(
+            parse_vibrational_modes,
+            name=f'vibrational_modes_{stage_name}',
+            retrieved=vasp_task.outputs.retrieved,
+        )
+
     return {
         'vasp': vasp_task,
         'energy': energy_task,
         'supercell': supercell_task,
         'input_structure': stage_structure,
+        'vibrational_modes': vibrational_modes_task,
     }
 
 
@@ -317,6 +384,7 @@ def expose_stage_outputs(
     """
     vasp_task = stage_tasks_result['vasp']
     energy_task = stage_tasks_result['energy']
+    vibrational_modes_task = stage_tasks_result.get('vibrational_modes')
 
     if namespace_map is not None:
         ns = namespace_map['main']
@@ -325,12 +393,16 @@ def expose_stage_outputs(
         setattr(wg.outputs, f'{ns}.vasp.misc', vasp_task.outputs.misc)
         setattr(wg.outputs, f'{ns}.vasp.remote', vasp_task.outputs.remote_folder)
         setattr(wg.outputs, f'{ns}.vasp.retrieved', vasp_task.outputs.retrieved)
+        if vibrational_modes_task is not None:
+            setattr(wg.outputs, f'{ns}.vasp.vibrational_modes', vibrational_modes_task.outputs.result)
     else:
         setattr(wg.outputs, f'{stage_name}_energy', energy_task.outputs.result)
         setattr(wg.outputs, f'{stage_name}_structure', vasp_task.outputs.structure)
         setattr(wg.outputs, f'{stage_name}_misc', vasp_task.outputs.misc)
         setattr(wg.outputs, f'{stage_name}_remote', vasp_task.outputs.remote_folder)
         setattr(wg.outputs, f'{stage_name}_retrieved', vasp_task.outputs.retrieved)
+        if vibrational_modes_task is not None:
+            setattr(wg.outputs, f'{stage_name}_vibrational_modes', vibrational_modes_task.outputs.result)
 
 
 def get_stage_results(
@@ -359,6 +431,7 @@ def get_stage_results(
         'misc': None,
         'remote': None,
         'files': None,
+        'vibrational_modes': None,
         'pk': wg_pk,
         'stage': stage_name,
         'type': 'vasp',
@@ -390,6 +463,10 @@ def get_stage_results(
                     result['remote'] = brick_ns.remote
                 if hasattr(brick_ns, 'retrieved'):
                     result['files'] = brick_ns.retrieved
+                if hasattr(brick_ns, 'vibrational_modes'):
+                    vm_node = brick_ns.vibrational_modes
+                    if hasattr(vm_node, 'get_dict'):
+                        result['vibrational_modes'] = vm_node.get_dict()
         else:
             # Flat naming fallback
             # Energy
@@ -422,6 +499,13 @@ def get_stage_results(
             retrieved_attr = f'{stage_name}_retrieved'
             if hasattr(outputs, retrieved_attr):
                 result['files'] = getattr(outputs, retrieved_attr)
+
+            # Vibrational modes (IBRION=5 stages only)
+            vm_attr = f'{stage_name}_vibrational_modes'
+            if hasattr(outputs, vm_attr):
+                vm_node = getattr(outputs, vm_attr)
+                if hasattr(vm_node, 'get_dict'):
+                    result['vibrational_modes'] = vm_node.get_dict()
 
     # Fallback: Traverse links to find VaspWorkChain outputs (for stored nodes)
     if result['energy'] is None or result['misc'] is None:
@@ -526,3 +610,21 @@ def print_stage_results(index: int, stage_name: str, stage_result: Dict[str, Any
     if stage_result['files'] is not None:
         files = stage_result['files'].list_object_names()
         console.print(f"      [bold]Retrieved:[/bold] [dim]{', '.join(files)}[/dim]")
+
+    vm = stage_result.get('vibrational_modes')
+    if vm:
+        status = vm.get('saddle_point_status', 'unknown')
+        color = {'confirmed': 'green', 'failed': 'red', 'uncertain': 'yellow'}.get(status, 'dim')
+        console.print(f"      [bold]Vib. modes:[/bold] [{color}]{vm.get('assessment', status)}[/{color}]")
+        n_large = vm.get('n_large_imaginary', 0)
+        n_trans = vm.get('n_translational_artifacts', 0)
+        ts_freq = vm.get('ts_frequency_cm1')
+        if n_large or n_trans:
+            parts = []
+            if n_large:
+                parts.append(f"{n_large} TS mode(s)")
+                if ts_freq:
+                    parts[-1] += f" @ {ts_freq:.1f} cm⁻¹"
+            if n_trans:
+                parts.append(f"{n_trans} translational artefact(s) (<5 cm⁻¹)")
+            console.print(f"      [bold]Imaginary modes:[/bold] [dim]{', '.join(parts)}[/dim]")

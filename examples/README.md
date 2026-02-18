@@ -21,6 +21,7 @@ This directory is organized as a numbered learning path from simple to advanced 
 9. `09_other_codes`
 10. `10_utilities`
 11. `11_neb` — nudged elastic band (NEB/CI-NEB pathways)
+11. `12_dimer` — Improved Dimer Method (IDM) for transition-state refinement: vibrational analysis → IDM TS search (IBRION=44) → TS verification
 
 ## Quick Start
 
