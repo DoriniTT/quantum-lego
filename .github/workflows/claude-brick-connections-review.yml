@@ -90,12 +90,13 @@ jobs:
   # Job 2: GitHub Copilot / gpt-codex-5.3 (optional)
   # ──────────────────────────────────────────────
   copilot-connections-review:
-    name: GitHub Copilot (gpt-codex-5.3) — Brick Connections Review
+    name: GitHub Copilot (openai/gpt-4.1) — Brick Connections Review
     if: ${{ inputs.use_copilot }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       issues: write
+      models: read
 
     steps:
       - name: Checkout repository
@@ -103,7 +104,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Review brick connections with GitHub Copilot (gpt-codex-5.3)
+      - name: Review brick connections with GitHub Copilot (openai/gpt-4.1)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -115,8 +116,8 @@ jobs:
           TOKEN = os.environ["GITHUB_TOKEN"]
           REPO  = os.environ["REPO"]
           RUN_ID = os.environ["RUN_ID"]
-          MODEL  = "gpt-codex-5.3"
-          API_URL = "https://models.inference.ai.azure.com/chat/completions"
+          MODEL  = "openai/gpt-4.1"
+          API_URL = "https://models.github.ai/inference/chat/completions"
 
           # ── Collect relevant file content (truncated to stay within token budget) ──
           SNIPPETS = [
@@ -203,7 +204,7 @@ jobs:
 
           # ── Create GitHub issue ──
           issue_payload = json.dumps({
-              "title": "Brick Connections Review — GitHub Copilot (gpt-codex-5.3)",
+              "title": f"Brick Connections Review — GitHub Copilot ({MODEL})",
               "body": issue_body,
               "labels": ["review", "brick-connections", "automated"],
           }).encode()

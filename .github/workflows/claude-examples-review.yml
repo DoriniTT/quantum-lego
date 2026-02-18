@@ -108,12 +108,13 @@ jobs:
   # Job 2: GitHub Copilot / gpt-codex-5.3 (optional)
   # ──────────────────────────────────────────────
   copilot-examples-review:
-    name: GitHub Copilot (gpt-codex-5.3) — Examples Review
+    name: GitHub Copilot (openai/gpt-4.1) — Examples Review
     if: ${{ inputs.use_copilot }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
       issues: write
+      models: read
 
     steps:
       - name: Checkout repository
@@ -121,7 +122,7 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Review examples with GitHub Copilot (gpt-codex-5.3)
+      - name: Review examples with GitHub Copilot (openai/gpt-4.1)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
@@ -134,8 +135,8 @@ jobs:
           TOKEN  = os.environ["GITHUB_TOKEN"]
           REPO   = os.environ["REPO"]
           RUN_ID = os.environ["RUN_ID"]
-          MODEL  = "gpt-codex-5.3"
-          API_URL = "https://models.inference.ai.azure.com/chat/completions"
+          MODEL  = "openai/gpt-4.1"
+          API_URL = "https://models.github.ai/inference/chat/completions"
 
           # ── Collect a representative sample of examples ──
           examples_root = Path("examples")
@@ -247,7 +248,7 @@ jobs:
 
           # ── Create GitHub issue ──
           issue_payload = json.dumps({
-              "title": "Examples Review — GitHub Copilot (gpt-codex-5.3)",
+              "title": f"Examples Review — GitHub Copilot ({MODEL})",
               "body": issue_body,
               "labels": ["review", "examples", "automated"],
           }).encode()
