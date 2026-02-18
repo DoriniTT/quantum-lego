@@ -10,7 +10,7 @@ Usage:
 from aiida import orm
 from pymatgen.core import Lattice, Structure
 
-from examples._shared.config import setup_profile
+from examples._shared.config import OBELIX_OPTIONS, setup_profile
 from quantum_lego import quick_aimd
 
 
@@ -60,18 +60,7 @@ if __name__ == '__main__':
         kpoints_spacing=0.5,
         potential_family='PBE',
         potential_mapping={'Sn': 'Sn_d', 'O': 'O'},
-        options={
-            'resources': {
-                'num_machines': 1,
-                'num_mpiprocs_per_machine': 4,
-            },
-            'custom_scheduler_commands': (
-                '#PBS -l cput=90000:00:00\n'
-                '#PBS -l nodes=1:ppn=88:skylake\n'
-                '#PBS -j oe\n'
-                '#PBS -N example_sno2_aimd'
-            ),
-        },
+        options=OBELIX_OPTIONS,
         name='example_sno2_aimd_quick',
     )
 

@@ -7,7 +7,7 @@ Usage:
     python examples/06_surface/thickness_convergence.py
 """
 
-from examples._shared.config import SNO2_POTCAR, setup_profile
+from examples._shared.config import OBELIX_OPTIONS, SNO2_POTCAR, setup_profile
 from examples._shared.structures import load_sno2
 from quantum_lego import quick_vasp_sequential
 
@@ -70,16 +70,7 @@ if __name__ == '__main__':
         kpoints_spacing=0.03,
         potential_family=SNO2_POTCAR['family'],
         potential_mapping=SNO2_POTCAR['mapping'],
-        options={
-            'resources': {
-                'num_machines': 1,
-                'num_mpiprocs_per_machine': 4,
-            },
-            'custom_scheduler_commands': '#PBS -l cput=90000:00:00\n'
-                                         '#PBS -l nodes=1:ppn=88:skylake\n'
-                                         '#PBS -j oe\n'
-                                         '#PBS -N example_thickness_sno2',
-        },
+        options=OBELIX_OPTIONS,
         max_concurrent_jobs=4,
         name='example_sno2_thickness_convergence',
     )
