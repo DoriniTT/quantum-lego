@@ -187,7 +187,33 @@ Read `docs/BRICK_CONNECTIONS.md`.
 
 ---
 
-## Phase 7: Create GitHub Issue
+## Phase 7: Self-Improvement Analysis
+
+Before creating the issue, reflect on this run and identify what would make this workflow better on the next run. Your suggestions will be included in the issue body — **do not edit any files or create any pull requests**.
+
+### 7.1 Read the current prompt
+
+```bash
+cat .github/workflows/brick-connections-review.md
+```
+
+### 7.2 Identify what to improve
+
+Based on what you encountered during this run, look for:
+- Bash commands you needed but were not in the allowed tools list
+- Instructions that were unclear, ambiguous, or caused you to backtrack
+- Analysis phases that were redundant, missing, or could be reordered
+- Context about the PORT system or brick structure that should be pre-stated
+- Output format improvements based on what was awkward to produce
+- Specific brick names or port type constants worth calling out explicitly
+
+Only flag what genuinely needs improving. Do not suggest changing things that worked well.
+
+Write your suggestions as a concise, actionable bullet list. You will include this list in the issue in Phase 8.
+
+---
+
+## Phase 8: Create GitHub Issue
 
 Create one GitHub issue titled `"Brick Connections Review — <today's date>"` with your complete findings.
 
@@ -274,6 +300,14 @@ Follow the `shared/reporting.md` formatting guidelines.
 3. **Medium**: [notable — test gaps for important brick types, stale docs]
 4. **Low**: [minor polish — naming inconsistencies, optional improvements]
 
+<details>
+<summary><b>Workflow Self-Improvement Suggestions</b></summary>
+
+[The bullet list you prepared in Phase 7 — specific, actionable suggestions for improving
+`.github/workflows/brick-connections-review.md` so the next run is faster and more thorough]
+
+</details>
+
 ### Workflow Run
 
 [workflow run link: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}]
@@ -287,52 +321,4 @@ Follow the `shared/reporting.md` formatting guidelines.
 - If a brick file is missing a `PORTS` declaration entirely, that is a Critical finding
 - If you cannot read a file, note it clearly but continue the analysis
 
----
-
-## Phase 8: Self-Improve This Workflow
-
-After completing all review phases and creating the issue, reflect on this run and improve this workflow's own prompt file so the next run is better.
-
-### 8.1 Read the current prompt
-
-```bash
-cat .github/workflows/brick-connections-review.md
-```
-
-### 8.2 Identify what to improve
-
-Based on what you encountered during this run, look for:
-- Bash commands you needed but were not in the allowed tools list
-- Instructions that were unclear, ambiguous, or caused you to backtrack
-- Analysis phases that were redundant, missing, or could be reordered
-- Context about the PORT system or brick structure that should be pre-stated
-- Output format improvements based on what was awkward to produce
-- Specific brick names or port type constants worth calling out explicitly
-
-Only improve what genuinely needs improving. Do not change things that worked well.
-
-### 8.3 Apply targeted edits
-
-Use the edit tool to update `.github/workflows/brick-connections-review.md` directly.
-Keep edits focused and purposeful — this is not a full rewrite.
-
-### 8.4 Regenerate the lock file (optional)
-
-Attempt to regenerate `brick-connections-review.lock.yml` from the updated prompt:
-
-```bash
-gh aw compile brick-connections-review
-```
-
-If the command is unavailable or fails, skip this step — note it in the PR body and the reviewer can run it after merge. Do **not** attempt any `git add`, `git commit`, or `git push` commands — those are not available in this environment.
-
-### 8.5 Create a self-improvement pull request
-
-Call `create_pull_request` directly. The safe_outputs job automatically commits all edits you made via the edit tool and opens the PR — you do not need to run any git commands yourself.
-
-PR body must include:
-- A bullet list of exactly what changed in the prompt and why
-- Whether `gh aw compile` succeeded or needs to be run manually after merge
-- A note confirming this was generated from run `${{ github.run_id }}`
-
-Begin your analysis now. Activate Serena, discover all brick files, read the core architecture, audit each brick and the validation logic, create the review issue, then self-improve this workflow.
+Begin your analysis now. Activate Serena, discover all brick files, read the core architecture, audit each brick and the validation logic, analyze self-improvement opportunities, then create the review issue.

@@ -152,7 +152,31 @@ Does `examples/README.md` exist?
 - If **yes**: is it complete and accurate? Does it list all categories with descriptions?
 - If **no**: note that it should be created as an index
 
-## Phase 6: Create GitHub Issue
+## Phase 6: Self-Improvement Analysis
+
+Before creating the issue, reflect on this run and identify what would make this workflow better on the next run. Your suggestions will be included in the issue body — **do not edit any files or create any pull requests**.
+
+### 6.1 Read the current prompt
+
+```bash
+cat .github/workflows/examples-review.md
+```
+
+### 6.2 Identify what to improve
+
+Based on what you encountered during this run, look for:
+- Bash commands you needed but were not in the allowed tools list
+- Instructions that were unclear, ambiguous, or caused you to backtrack
+- Analysis phases that were redundant, missing, or could be reordered
+- Context about the repo structure that should be pre-stated in the prompt
+- Output format improvements based on what was awkward to produce
+- Anything that made this run slower or less thorough than it could have been
+
+Only flag what genuinely needs improving. Do not suggest changing things that worked well.
+
+Write your suggestions as a concise, actionable bullet list. You will include this list in the issue in Phase 7.
+
+## Phase 7: Create GitHub Issue
 
 Create one GitHub issue titled `"Examples Review — <today's date>"` with your complete findings.
 
@@ -219,6 +243,14 @@ Follow the `shared/reporting.md` formatting guidelines.
 3. **Medium**: [nice-to-have changes]
 4. **Low**: [minor polish]
 
+<details>
+<summary><b>Workflow Self-Improvement Suggestions</b></summary>
+
+[The bullet list you prepared in Phase 6 — specific, actionable suggestions for improving
+`.github/workflows/examples-review.md` so the next run is faster and more thorough]
+
+</details>
+
 ### Workflow Run
 
 [workflow run link]
@@ -232,50 +264,4 @@ Follow the `shared/reporting.md` formatting guidelines.
 - If a category directory is empty or missing, note it clearly
 - If you cannot read a file, note it but continue the analysis
 
-## Phase 7: Self-Improve This Workflow
-
-After completing all review phases and creating the issue, reflect on this run and improve this workflow's own prompt file so the next run is better.
-
-### 7.1 Read the current prompt
-
-```bash
-cat .github/workflows/examples-review.md
-```
-
-### 7.2 Identify what to improve
-
-Based on what you encountered during this run, look for:
-- Bash commands you needed but were not in the allowed tools list
-- Instructions that were unclear, ambiguous, or caused you to backtrack
-- Analysis phases that were redundant, missing, or could be reordered
-- Context about the repo structure that should be pre-stated in the prompt
-- Output format improvements based on what was awkward to produce
-- Anything that made this run slower or less thorough than it could have been
-
-Only improve what genuinely needs improving. Do not change things that worked well.
-
-### 7.3 Apply targeted edits
-
-Use the edit tool to update `.github/workflows/examples-review.md` directly.
-Keep edits focused and purposeful — this is not a full rewrite.
-
-### 7.4 Regenerate the lock file (optional)
-
-Attempt to regenerate `examples-review.lock.yml` from the updated prompt:
-
-```bash
-gh aw compile examples-review
-```
-
-If the command is unavailable or fails, skip this step — note it in the PR body and the reviewer can run it after merge. Do **not** attempt any `git add`, `git commit`, or `git push` commands — those are not available in this environment.
-
-### 7.5 Create a self-improvement pull request
-
-Call `create_pull_request` directly. The safe_outputs job automatically commits all edits you made via the edit tool and opens the PR — you do not need to run any git commands yourself.
-
-PR body must include:
-- A bullet list of exactly what changed in the prompt and why
-- Whether `gh aw compile` succeeded or needs to be run manually after merge
-- A note confirming this was generated from run `${{ github.run_id }}`
-
-Begin your analysis now. Discover files, read representative examples, assess each category, create the review issue, then self-improve this workflow.
+Begin your analysis now. Discover files, read representative examples, assess each category, analyze self-improvement opportunities, then create the review issue.
