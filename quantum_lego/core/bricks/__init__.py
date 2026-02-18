@@ -137,6 +137,12 @@ def resolve_structure_from(structure_from: str, context: dict):
 
     ref_stage_type = stage_types.get(structure_from, 'vasp')
     if ref_stage_type == 'vasp' or ref_stage_type == 'aimd':
+        # Static calculations (nsw=0) don't produce a structure output.
+        # Fall back to the concrete input_structure stored in stage_tasks.
+        stages = context.get('stages', [])
+        ref_stage_config = next((s for s in stages if s.get('name') == structure_from), {})
+        if ref_stage_config.get('incar', {}).get('nsw', None) == 0:
+            return stage_tasks[structure_from]['input_structure']
         return stage_tasks[structure_from]['vasp'].outputs.structure
     elif ref_stage_type == 'dimer':
         # Use the CONTCAR-derived structure (dimer axis lines stripped) so that
