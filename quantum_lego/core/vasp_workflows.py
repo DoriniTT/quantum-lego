@@ -474,9 +474,6 @@ def quick_vasp_sequential(
         - VaspWorkChain handles WAVECAR/CHGCAR copying from restart.folder automatically
     """
 
-    def _serialize_barrier() -> bool:
-        """No-op task used to serialize stages via _wait links (avoids Task.waiting_on deserialization issues)."""
-        return True
     # Validate required inputs
     if structure is None:
         raise ValueError("structure is required")
@@ -508,7 +505,7 @@ def quick_vasp_sequential(
     stage_names = []  # Ordered list
     stage_types = {}  # name -> 'vasp', 'dos', 'batch', 'bader', etc.
     stage_namespaces = {}  # name -> namespace_map (e.g. {'main': 's01_relax_2x2_rough'})
-    _prev_stage_barrier_task = None  # Used by serialize_stages
+    _prev_stage_leaf_task = None  # Used by serialize_stages
     _WG_BUILTIN_TASK_NAMES = {'graph_inputs', 'graph_outputs', 'graph_ctx'}
 
     for i, stage in enumerate(stages):
@@ -543,22 +540,15 @@ def quick_vasp_sequential(
         stage_tasks[stage_name] = tasks_result
 
         # serialize_stages: chain stages so each starts only after the previous finishes.
-        # Do NOT use Task.waiting_on: it serializes to the per-task "wait" list and aiida-workgraph
-        # validates wait targets during WorkGraph.from_dict before all tasks exist (AiiDA may reorder keys).
+        # Task.waiting_on.add() is used here — it adds _wait links AND stores names in _items.
+        # We clear _items before submit (see below) so the DB never has a non-empty wait list,
+        # preventing WorkGraph.from_dict from re-validating task names before all tasks exist.
         _new_tasks_all = [t for t in wg.tasks
                            if t.name not in _WG_BUILTIN_TASK_NAMES and t.name not in _names_before]
-        if serialize_stages and _prev_stage_barrier_task is not None and _new_tasks_all:
-            for _task in _new_tasks_all:
-                wg.add_link(_prev_stage_barrier_task.outputs._wait, _task.inputs._wait)
-
-        if serialize_stages and _new_tasks_all:
-            barrier = wg.add_task(
-                _serialize_barrier,
-                name=f'serialize_barrier_{i + 1:03d}_{stage_name}',
-            )
-            for _task in _new_tasks_all:
-                wg.add_link(_task.outputs._wait, barrier.inputs._wait)
-            _prev_stage_barrier_task = barrier
+        if serialize_stages and _prev_stage_leaf_task is not None and _new_tasks_all:
+            _new_tasks_all[0].waiting_on.add(_prev_stage_leaf_task)
+        if _new_tasks_all:
+            _prev_stage_leaf_task = _new_tasks_all[-1]
 
         # Build namespace_map with index prefix for ordered display
         # Use 's' prefix (stage) since Python identifiers can't start with digits
@@ -601,6 +591,14 @@ def quick_vasp_sequential(
             )
             combined_name = _build_combined_trajectory_output_name(len(stage_names))
             setattr(wg.outputs, combined_name, concat_task.outputs.result)
+
+    # Clear waiting_on._items before submitting.
+    # waiting_on.add() already created _wait links; clearing _items makes the serialized
+    # wait=[] so WorkGraph.from_dict never re-validates task names (which would fail if
+    # keys are reordered). The _wait links in the links list are preserved and drive execution.
+    for _t in wg.tasks:
+        if hasattr(_t, 'waiting_on'):
+            _t.waiting_on._items.clear()
 
     # Submit
     wg.submit()
