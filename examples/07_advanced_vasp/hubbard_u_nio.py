@@ -17,7 +17,7 @@ Usage:
     python examples/07_advanced_vasp/hubbard_u_nio.py
 """
 
-from examples._shared.config import setup_profile
+from examples._shared.config import OBELIX_OPTIONS, setup_profile
 from examples._shared.structures import load_nio
 from quantum_lego import quick_hubbard_u
 
@@ -47,18 +47,7 @@ if __name__ == '__main__':
         kpoints_spacing=0.03,
         potential_family='PBE',
         potential_mapping={'Ni': 'Ni', 'O': 'O'},
-        options={
-            'resources': {
-                'num_machines': 1,
-                'num_mpiprocs_per_machine': 4,
-            },
-            'custom_scheduler_commands': (
-                '#PBS -l cput=90000:00:00\n'
-                '#PBS -l nodes=1:ppn=88:skylake\n'
-                '#PBS -j oe\n'
-                '#PBS -N example_nio_hubbard_u'
-            ),
-        },
+        options=OBELIX_OPTIONS,
         max_concurrent_jobs=4,
         name='example_nio_hubbard_u',
     )

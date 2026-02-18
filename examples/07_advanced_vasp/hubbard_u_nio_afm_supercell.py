@@ -24,7 +24,7 @@ Usage:
     python examples/07_advanced_vasp/hubbard_u_nio_afm_supercell.py
 """
 
-from examples._shared.config import setup_profile
+from examples._shared.config import OBELIX_OPTIONS, setup_profile
 from examples._shared.structures import load_nio
 
 from aiida import orm
@@ -139,18 +139,7 @@ if __name__ == '__main__':
         kpoints_spacing=0.03,
         potential_family=potential_family,
         potential_mapping=potential_mapping,
-        options={
-            'resources': {
-                'num_machines': 1,
-                'num_mpiprocs_per_machine': 4,
-            },
-            'custom_scheduler_commands': (
-                '#PBS -l cput=90000:00:00\n'
-                '#PBS -l nodes=1:ppn=88:skylake\n'
-                '#PBS -j oe\n'
-                '#PBS -N nio_hubbard_u'
-            ),
-        },
+        options=OBELIX_OPTIONS,
         max_concurrent_jobs=4,
         name='nio_hubbard_u',
     )
