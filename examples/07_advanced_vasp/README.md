@@ -13,6 +13,7 @@ This section covers specialized VASP workflows.
 - `birch_murnaghan_sno2.py`: Birch-Murnaghan EOS with coarse scan + refinement round.
 - `hybrid_bands_and_dos_sno2.py`: HSE06 hybrid band structure + DOS (hybrid_bands + dos bricks).
 - `plot_workgraph_bands_and_dos.py`: Plot bands + TDOS/PDOS from a finished WorkGraph.
+- `fukui_indices.py`: Fukui index analysis for SnO2 using the `fukui_dynamic` + `fukui_analysis` bricks (f⁺/f⁻ charge-density interpolation).
 
 ## Run
 
@@ -25,6 +26,7 @@ python examples/07_advanced_vasp/sequential_relax_then_u.py
 python examples/07_advanced_vasp/neb_pipeline.py
 python examples/07_advanced_vasp/birch_murnaghan_sno2.py
 python examples/07_advanced_vasp/hybrid_bands_and_dos_sno2.py
+python examples/07_advanced_vasp/fukui_indices.py
 
 # after it finishes:
 python examples/07_advanced_vasp/plot_workgraph_bands_and_dos.py <WORKGRAPH_PK>
