@@ -652,7 +652,7 @@ stages = [
 ]
 ```
 
-See `examples/06_surface/neb_pt_step_edge.py` for a complete working example
+See `examples/11_neb/neb_pt_step_edge.py` for a complete working example
 (N diffusion on a Pt(211) step edge, 5 images, VTST FIRE optimiser).
 
 ### 10. QE Brick (`qe`)
@@ -1306,7 +1306,7 @@ result = quick_vasp_sequential(
 )
 ```
 
-See `examples/06_surface/neb_pt_step_edge.py` for the full runnable script
+See `examples/11_neb/neb_pt_step_edge.py` for the full runnable script
 including structure generation.
 
 ---

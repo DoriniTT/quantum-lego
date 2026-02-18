@@ -15,11 +15,12 @@ This directory is organized as a numbered learning path from simple to advanced 
 3. `03_batch`
 4. `04_sequential`
 5. `05_convergence`
-6. `06_surface` — surface workflows including NEB (`neb_pt_step_edge.py`)
+6. `06_surface`
 7. `07_advanced_vasp`
 8. `08_aimd`
 9. `09_other_codes`
 10. `10_utilities`
+11. `11_neb` — nudged elastic band (NEB/CI-NEB pathways)
 
 ## Quick Start
 
