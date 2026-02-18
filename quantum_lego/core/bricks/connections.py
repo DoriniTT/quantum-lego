@@ -161,10 +161,8 @@ DOS_PORTS = {
         },
     },
     'outputs': {
-        'energy': {
-            'type': 'energy',
-            'description': 'SCF energy',
-        },
+        # NOTE: no 'energy' output — DOS SCF energy is not exposed as a
+        # connectable WorkGraph port. Use a VASP/AIMD/QE/CP2K stage for energy.
         'scf_misc': {
             'type': 'misc',
             'description': 'SCF parsed results',
@@ -911,10 +909,8 @@ HYBRID_BANDS_PORTS = {
         },
     },
     'outputs': {
-        'energy': {
-            'type': 'energy',
-            'description': 'SCF energy (from split calculations)',
-        },
+        # NOTE: no 'energy' output — hybrid_bands SCF energy is not exposed as
+        # a connectable WorkGraph port. Use a VASP/AIMD/QE/CP2K stage for energy.
         'scf_misc': {
             'type': 'misc',
             'description': 'SCF parsed results (from split calculations)',
@@ -1149,6 +1145,16 @@ def validate_connections(stages: list) -> list:
     output_conditionals = {}  # stage_name -> {port_name: conditional_dict}
     warn_list = []
 
+    # Build a name→index map for forward-reference / self-reference detection
+    name_to_index = {}
+    for i, stage in enumerate(stages):
+        sname = stage['name']
+        if sname in name_to_index:
+            raise ValueError(
+                f"Duplicate stage name '{sname}'. All stage names must be unique."
+            )
+        name_to_index[sname] = i
+
     for i, stage in enumerate(stages):
         name = stage['name']
         brick_type = stage.get('type', 'vasp')
@@ -1187,6 +1193,14 @@ def validate_connections(stages: list) -> list:
             # ── Handle 'auto' source (VASP structure) ──
             if source_key == 'auto':
                 structure_from = stage.get('structure_from', 'previous')
+
+                # Detect self-reference regardless of stage position
+                if structure_from == name:
+                    raise ValueError(
+                        f"Stage '{name}': structure_from='{structure_from}' "
+                        f"is a self-reference (circular dependency). A stage "
+                        f"cannot depend on its own outputs."
+                    )
 
                 if i == 0:
                     # First stage: always uses initial structure
@@ -1252,6 +1266,12 @@ def validate_connections(stages: list) -> list:
                                     )
                 else:
                     # structure_from is an explicit stage name
+                    if structure_from == name:
+                        raise ValueError(
+                            f"Stage '{name}': structure_from='{structure_from}' "
+                            f"is a self-reference (circular dependency). A stage "
+                            f"cannot depend on its own outputs."
+                        )
                     if structure_from not in available_outputs:
                         raise ValueError(
                             f"Stage '{name}': "
@@ -1319,6 +1339,14 @@ def validate_connections(stages: list) -> list:
             # 'input' means use initial structure → always valid
             if ref_stage_name == 'input':
                 continue
+
+            # Detect self-reference (a stage depending on itself)
+            if ref_stage_name == name:
+                raise ValueError(
+                    f"Stage '{name}': '{source_key}={ref_stage_name}' is a "
+                    f"self-reference (circular dependency). A stage cannot "
+                    f"depend on its own outputs."
+                )
 
             # Check referenced stage exists
             if ref_stage_name not in available_outputs:

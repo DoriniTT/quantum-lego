@@ -4,22 +4,24 @@ This guide visualizes how Quantum Lego bricks connect together like puzzle piece
 
 ## Table of Contents
 
-1. [Overview: All 16 Brick Types](#overview-all-16-brick-types)
+1. [Overview: All 26 Brick Types](#overview-all-26-brick-types)
 2. [Port Type System](#port-type-system)
 3. [Basic Sequential Patterns](#basic-sequential-patterns)
 4. [Advanced Workflows](#advanced-workflows)
 5. [Batch and Analysis Patterns](#batch-and-analysis-patterns)
 6. [Multi-Code Workflows](#multi-code-workflows)
-7. [Connection Rules](#connection-rules)
+7. [Surface Workflow Bricks](#surface-workflow-bricks)
+8. [Connection Rules](#connection-rules)
 
 ---
 
-## Overview: All 16 Brick Types
+## Overview: All 26 Brick Types
 
 ```mermaid
 graph TB
     subgraph "Computation Bricks (Structure Producers)"
         VASP[VASP<br/>Relax, SCF, Static]
+        DIMER[DIMER<br/>Dimer Method]
         AIMD[AIMD<br/>Molecular Dynamics]
         QE[QE<br/>Quantum ESPRESSO]
         CP2K[CP2K<br/>CP2K Calculations]
@@ -28,12 +30,15 @@ graph TB
 
     subgraph "Computation Bricks (Non-Structure)"
         DOS[DOS<br/>Density of States]
+        HYBRID[HYBRID_BANDS<br/>Hybrid Band Structure]
         BATCH[BATCH<br/>Parallel Calculations]
+        FUKUI_DYN[FUKUI_DYNAMIC<br/>Fukui Parallel Calcs]
     end
 
     subgraph "EOS Bricks"
         BM[BIRCH_MURNAGHAN<br/>EOS Fitting]
         BM_REF[BIRCH_MURNAGHAN_REFINE<br/>Refined EOS Scan]
+        O2[O2_REFERENCE_ENERGY<br/>O2 Reference]
     end
 
     subgraph "Analysis Bricks"
@@ -46,13 +51,25 @@ graph TB
         FUKUI[FUKUI_ANALYSIS<br/>Fukui Index]
     end
 
+    subgraph "Surface Workflow Bricks"
+        SURF_ENUM[SURFACE_ENUMERATION<br/>Miller Indices]
+        SURF_TERM[SURFACE_TERMINATIONS<br/>Slab Generation]
+        DYN_BATCH[DYNAMIC_BATCH<br/>Parallel Slab Relax]
+        FORM_ENTH[FORMATION_ENTHALPY<br/>ΔHf Calculation]
+        SURF_GIBBS[SURFACE_GIBBS_ENERGY<br/>Surface φ(T,P)]
+        SEL_SURF[SELECT_STABLE_SURFACE<br/>Minimum φ Selector]
+    end
+
     style VASP fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style DIMER fill:#4CAF50,stroke:#2E7D32,color:#fff
     style AIMD fill:#4CAF50,stroke:#2E7D32,color:#fff
     style QE fill:#4CAF50,stroke:#2E7D32,color:#fff
     style CP2K fill:#4CAF50,stroke:#2E7D32,color:#fff
     style NEB fill:#4CAF50,stroke:#2E7D32,color:#fff
     style DOS fill:#2196F3,stroke:#1565C0,color:#fff
+    style HYBRID fill:#2196F3,stroke:#1565C0,color:#fff
     style BATCH fill:#2196F3,stroke:#1565C0,color:#fff
+    style FUKUI_DYN fill:#2196F3,stroke:#1565C0,color:#fff
     style BADER fill:#FF9800,stroke:#E65100,color:#fff
     style CONV fill:#FF9800,stroke:#E65100,color:#fff
     style THICK fill:#FF9800,stroke:#E65100,color:#fff
@@ -62,25 +79,35 @@ graph TB
     style FUKUI fill:#FF9800,stroke:#E65100,color:#fff
     style BM fill:#E91E63,stroke:#AD1457,color:#fff
     style BM_REF fill:#E91E63,stroke:#AD1457,color:#fff
+    style O2 fill:#E91E63,stroke:#AD1457,color:#fff
+    style SURF_ENUM fill:#9C27B0,stroke:#6A1B9A,color:#fff
+    style SURF_TERM fill:#9C27B0,stroke:#6A1B9A,color:#fff
+    style DYN_BATCH fill:#9C27B0,stroke:#6A1B9A,color:#fff
+    style FORM_ENTH fill:#9C27B0,stroke:#6A1B9A,color:#fff
+    style SURF_GIBBS fill:#9C27B0,stroke:#6A1B9A,color:#fff
+    style SEL_SURF fill:#9C27B0,stroke:#6A1B9A,color:#fff
 ```
 
 **Legend:**
 - 🟢 **Green**: Computation bricks that produce structure outputs
 - 🔵 **Blue**: Computation bricks without structure outputs
 - 🟠 **Orange**: Analysis bricks
-- 🔴 **Pink**: EOS bricks (fitting and refinement)
+- 🔴 **Pink**: EOS/reference energy bricks
+- 🟣 **Purple**: Surface workflow bricks
 
 ---
 
 ## Port Type System
 
-The brick connection system uses typed ports for data flow:
+The brick connection system uses 19 typed ports for data flow:
 
 ```mermaid
 graph LR
     subgraph "Core Data Types"
         S[structure]
+        SS[structures]
         E[energy]
+        EE[energies]
         M[misc]
     end
 
@@ -94,6 +121,7 @@ graph LR
         PROJ[projectors]
         TRAJ[trajectory]
         BC[bader_charges]
+        BS[band_structure]
     end
 
     subgraph "Analysis Results"
@@ -102,19 +130,19 @@ graph LR
         HO[hubbard_occupation]
         HRES[hubbard_result]
         SF[surface_families]
+        FE[formation_enthalpy]
     end
 
-    subgraph "EOS Types"
+    subgraph "EOS/Utility Types"
         EOS_R[eos_result]
-    end
-
-    subgraph "Utility Types"
         FILE[file]
         NEB_I[neb_images]
     end
 
     style S fill:#4CAF50,color:#fff
+    style SS fill:#4CAF50,color:#fff
     style E fill:#FFC107,color:#000
+    style EE fill:#FFC107,color:#000
     style M fill:#9E9E9E,color:#fff
     style RF fill:#3F51B5,color:#fff
     style RET fill:#3F51B5,color:#fff
@@ -122,15 +150,21 @@ graph LR
     style PROJ fill:#E91E63,color:#fff
     style TRAJ fill:#00BCD4,color:#fff
     style BC fill:#FF5722,color:#fff
+    style BS fill:#FF5722,color:#fff
     style CONV fill:#8BC34A,color:#fff
     style HR fill:#9C27B0,color:#fff
     style HO fill:#9C27B0,color:#fff
     style HRES fill:#9C27B0,color:#fff
     style SF fill:#FF9800,color:#fff
+    style FE fill:#FF9800,color:#fff
     style FILE fill:#607D8B,color:#fff
     style NEB_I fill:#795548,color:#fff
     style EOS_R fill:#E91E63,color:#fff
 ```
+
+> **Note on energy ports:** `DOS` and `HYBRID_BANDS` bricks compute SCF energy internally
+> but do **not** expose it as a connectable WorkGraph port. To chain energy values,
+> use a `VASP`, `AIMD`, `QE`, `CP2K`, or `O2_REFERENCE_ENERGY` stage instead.
 
 ---
 
@@ -173,7 +207,7 @@ graph LR
     INPUT[Initial Structure] -->|structure| RELAX[VASP Relax<br/>nsw=100]
     RELAX -->|structure| DOS_CALC[DOS Brick<br/>SCF + DOS]
 
-    DOS_CALC -->|energy| SCF_E[SCF Energy]
+    DOS_CALC -->|scf_misc| SCF_M[SCF Misc Results]
     DOS_CALC -->|dos| DOS_DATA[DOS Data]
     DOS_CALC -->|projectors| PROJ_DATA[Projected DOS]
 
@@ -532,6 +566,52 @@ graph LR
 
 ---
 
+## Surface Workflow Bricks
+
+The surface workflow bricks form a pipeline for computing surface Gibbs free energies across all terminations:
+
+```mermaid
+graph TB
+    BULK_STRUCT[Bulk Structure] -->|structure| SURF_ENUM[SURFACE_ENUMERATION<br/>Find Miller Planes]
+    BULK_STRUCT -->|structure| SURF_TERM[SURFACE_TERMINATIONS<br/>Generate Slab Terminations]
+    BULK_STRUCT -->|structure| BULK_VASP[VASP Bulk Relax]
+
+    SURF_TERM -->|structures| DYN_BATCH[DYNAMIC_BATCH<br/>Parallel Slab Relaxations]
+
+    BULK_VASP -->|structure| FORM_ENTH[FORMATION_ENTHALPY<br/>ΔHf Calculation]
+    BULK_VASP -->|energy| FORM_ENTH
+
+    BULK_VASP -->|structure| SURF_GIBBS[SURFACE_GIBBS_ENERGY<br/>Surface φ(T,P)]
+    BULK_VASP -->|energy| SURF_GIBBS
+    DYN_BATCH -->|structures| SURF_GIBBS
+    DYN_BATCH -->|energies| SURF_GIBBS
+    FORM_ENTH -->|formation_enthalpy| SURF_GIBBS
+
+    SURF_GIBBS -->|summary| SEL_SURF[SELECT_STABLE_SURFACE<br/>Minimum φ Selector]
+    DYN_BATCH -->|structures| SEL_SURF
+
+    SEL_SURF -->|structure| STABLE[Most Stable Termination]
+
+    style BULK_VASP fill:#4CAF50,stroke:#2E7D32,color:#fff
+    style SURF_ENUM fill:#9C27B0,stroke:#6A1B9A,color:#fff
+    style SURF_TERM fill:#9C27B0,stroke:#6A1B9A,color:#fff
+    style DYN_BATCH fill:#9C27B0,stroke:#6A1B9A,color:#fff
+    style FORM_ENTH fill:#9C27B0,stroke:#6A1B9A,color:#fff
+    style SURF_GIBBS fill:#9C27B0,stroke:#6A1B9A,color:#fff
+    style SEL_SURF fill:#9C27B0,stroke:#6A1B9A,color:#fff
+    style BULK_STRUCT fill:#FFD54F,stroke:#F57F17,color:#000
+    style STABLE fill:#90CAF9,stroke:#1565C0,color:#000
+```
+
+**Key source keys for surface workflow bricks:**
+- `structures_from`: connects to `surface_terminations` or `dynamic_batch`
+- `bulk_structure_from` / `bulk_energy_from`: connects to a VASP bulk stage
+- `slab_structures_from` / `slab_energies_from`: connects to `dynamic_batch`
+- `formation_enthalpy_from`: connects to `formation_enthalpy`
+- `summary_from`: connects to `surface_gibbs_energy`
+
+---
+
 ## Connection Rules
 
 ### 1. Source Resolution Modes
@@ -541,15 +621,30 @@ graph LR
 | `auto` | General mode for structure-bearing bricks: resolves structure from `structure_from` (defaulting to `previous`/`input` when absent) | `'source': 'auto'` → uses `structure_from` or falls back to previous/input |
 | `structure_from` | Reference structure from named stage | `'structure_from': 'relax'` |
 | `structure` | Explicit stage-level structure (`StructureData` or PK) for bricks that support it | `'structure': adsorbate_structure` |
-| `energy_from` | Reference energy from named stage | `'energy_from': 'scf'` |
+| `energy_from` | Reference connectable energy from named stage | `'energy_from': 'scf'` |
 | `charge_from` | Bader: reference VASP charge stage | `'charge_from': 'scf'` |
 | `ground_state_from` | Hubbard: reference ground state VASP | `'ground_state_from': 'gs'` |
 | `response_from` | Hubbard analysis: reference response | `'response_from': 'response'` |
 | `restart` | Reuse remote folder (WAVECAR/CHGCAR) | `'restart': 'previous_stage'` |
-| `initial_from` / `final_from` | NEB endpoints | `'initial_from': 'relax_i'` |
+| `initial_from` / `final_from` | NEB/DIMER endpoints | `'initial_from': 'relax_i'` |
 | `images_from` | NEB images from generator | `'images_from': 'gen_images'` |
-| `batch_from` | BM: reference batch stage for energies | `'batch_from': 'volume_scan'` |
+| `vibrational_from` | DIMER: reference vibrational VASP | `'vibrational_from': 'vib_stage'` |
+| `batch_from` | BM/FUKUI_ANALYSIS: reference batch stage | `'batch_from': 'volume_scan'` |
 | `eos_from` | BM refine: reference BM fit for V0 | `'eos_from': 'eos_fit'` |
+| `structures_from` | DYNAMIC_BATCH/SELECT_STABLE: reference structures | `'structures_from': 'terms'` |
+| `bulk_structure_from` | Surface Gibbs: reference bulk structure | `'bulk_structure_from': 'bulk'` |
+| `bulk_energy_from` | Surface Gibbs: reference bulk energy | `'bulk_energy_from': 'bulk'` |
+| `slab_structures_from` | Surface Gibbs: reference slab structures | `'slab_structures_from': 'db'` |
+| `slab_energies_from` | Surface Gibbs: reference slab energies | `'slab_energies_from': 'db'` |
+| `formation_enthalpy_from` | Surface Gibbs: reference ΔHf | `'formation_enthalpy_from': 'fe'` |
+| `summary_from` | Select stable: reference Gibbs summary | `'summary_from': 'sge'` |
+
+> **Energy connectable sources:** `vasp`, `dimer`, `aimd`, `qe`, `cp2k`, `o2_reference_energy`.
+> `DOS` and `HYBRID_BANDS` are **not** valid `energy_from` sources (energy not exposed as WorkGraph port).
+
+> **Resolver behavior:** `resolve_structure_from()` dispatches on brick type. `resolve_energy_from()`
+> dispatches on stage type and returns the energy calcfunction task output socket for wiring
+> into downstream bricks. Both functions raise `ValueError` for unsupported combinations.
 
 ---
 
@@ -650,37 +745,49 @@ warnings = validate_connections(stages)
 ```
 
 **What it checks:**
-1. ✓ Port type compatibility
-2. ✓ Referenced stages exist
-3. ✓ Brick compatibility constraints
-4. ✓ Prerequisites (INCAR settings, retrieve lists)
-5. ⚠ Conditional output warnings
+1. ✓ Duplicate stage names (raised immediately)
+2. ✓ Port type compatibility
+3. ✓ Referenced stages exist (forward references caught as "unknown stage")
+4. ✓ Self-references (circular dependency: a stage cannot reference itself)
+5. ✓ Brick compatibility constraints
+6. ✓ Prerequisites (INCAR settings, retrieve lists)
+7. ⚠ Conditional output warnings
 
 ---
 
 ## Quick Reference: Brick Capabilities
 
-| Brick | Input Structure | Output Structure | Output Energy | Output Trajectory | Requires Prior VASP | Chainable |
+| Brick | Input Structure | Output Structure | Output Energy | Output Trajectory | Requires Prior Stage | Chainable |
 |-------|----------------|------------------|---------------|-------------------|---------------------|-----------|
 | **vasp** | Yes | Yes* | Yes | No | No | Via `restart` |
-| **dos** | From stage or explicit | No | Yes (SCF) | No | Optional (`structure_from`) | No |
+| **dimer** | Yes | Yes* | Yes | No | Yes (`vibrational_from`) | Via `restart` |
+| **dos** | From stage or explicit | No | No† | No | Optional (`structure_from`) | No |
+| **hybrid_bands** | From stage | No | No† | No | Optional (`structure_from`) | No |
 | **batch** | From stage | No | Yes (per-calc) | No | Yes | No |
-| **bader** | From stage | No | No | No | Yes | No |
+| **fukui_dynamic** | Yes | No | No | No | No | No |
+| **bader** | From stage | No | No | No | Yes (`charge_from`) | No |
 | **convergence** | Optional | No | No | No | No | No |
 | **thickness** | Optional | No | No | No | No | No |
-| **surface_enumeration** | From stage or input | No | No | No | No | No |
-| **hubbard_response** | From stage | No | No | No | Yes (ground state) | No |
-| **hubbard_analysis** | From stage | No | No | No | No (uses response data) | No |
+| **hubbard_response** | From stage | No | No | No | Yes (`ground_state_from`) | No |
+| **hubbard_analysis** | From stage | No | No | No | Yes (`response_from`) | No |
 | **aimd** | Yes | Yes | Yes | Yes | No | Via `restart` |
 | **qe** | Yes | Yes* | Yes | No | No | Via `restart` |
 | **cp2k** | Yes | Yes* | Yes | Yes* | No | Via `restart` |
 | **generate_neb_images** | 2x from VASP | No | No | No | Yes (endpoints) | No |
 | **neb** | 2x from VASP | Yes | No | Yes | Yes (endpoints) | Via `restart` |
-| **birch_murnaghan** | From batch | Yes (V0) | No | No | Yes (batch) | No |
-| **birch_murnaghan_refine** | From BM + struct | Yes (V0) | No | No | Yes (BM fit) | No |
-| **fukui_analysis** | From batch | No | No | No | Yes (batch) | No |
+| **birch_murnaghan** | No | Yes (V0) | No | No | Yes (`batch_from`) | No |
+| **birch_murnaghan_refine** | From stage | Yes (V0) | No | No | Yes (`eos_from`) | No |
+| **fukui_analysis** | No | No | No | No | Yes (`batch_from`) | No |
+| **o2_reference_energy** | Explicit PKs | Yes | Yes | No | No | No |
+| **surface_enumeration** | From stage | No | No | No | No | No |
+| **surface_terminations** | From stage | No (structures) | No | No | No | No |
+| **dynamic_batch** | From `surface_terminations` | Yes (structures) | Yes (energies) | No | Yes | No |
+| **formation_enthalpy** | From stage | No | No | No | Yes (`energy_from`) | No |
+| **surface_gibbs_energy** | From stage | No | No | No | Yes (multiple) | No |
+| **select_stable_surface** | No | Yes | No | No | Yes (multiple) | No |
 
 \* Conditional on calculation type (see [Conditional Outputs](#5-conditional-outputs))
+† `DOS` and `HYBRID_BANDS` compute energy internally but do **not** expose it as a connectable port
 
 ---
 
