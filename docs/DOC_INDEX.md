@@ -165,6 +165,10 @@ For contributors or developers integrating Quantum Lego.
 → [DOCUMENTATION.md - DOS Brick](DOCUMENTATION.md#2-dos-brick-dos)
 → [VISUAL_GUIDE.md - DOS Calculation](VISUAL_GUIDE.md#dos-calculation-two-step-process)
 
+### "I need hybrid (HSE) band structure + DOS"
+→ [DOCUMENTATION.md - Hybrid Bands Brick](DOCUMENTATION.md#2b-hybrid-bands-brick-hybrid_bands)
+→ Example script: `examples/07_advanced_vasp/hybrid_bands_and_dos_sno2.py`
+
 ### "I want one WorkGraph with mixed structure sources"
 → [DOCUMENTATION.md - Mixed Structure Sources in One WorkGraph](DOCUMENTATION.md#mixed-structure-sources-in-one-workgraph)
 → Example script: `examples/vasp/run_mixed_dos_sources.py`
@@ -216,6 +220,7 @@ Quick lookup table for all brick types:
 |------------|----------|---------------|--------|
 | `vasp` | Standard VASP calculations | [Docs](DOCUMENTATION.md#1-vasp-brick-vasp) | [Visual](VISUAL_GUIDE.md#simple-vasp-relaxation) |
 | `dos` | Density of states | [Docs](DOCUMENTATION.md#2-dos-brick-dos) | [Visual](VISUAL_GUIDE.md#dos-calculation-two-step-process) |
+| `hybrid_bands` | Hybrid-functional band structures | [Docs](DOCUMENTATION.md#2b-hybrid-bands-brick-hybrid_bands) | - |
 | `batch` | Parallel calculations | [Docs](DOCUMENTATION.md#3-batch-brick-batch) | [Visual](VISUAL_GUIDE.md#batch-vasp-calculations) |
 | `aimd` | Molecular dynamics | [Docs](DOCUMENTATION.md#4-aimd-brick-aimd) | - |
 | `convergence` | Parameter testing | [Docs](DOCUMENTATION.md#5-convergence-brick-convergence) | [Visual](VISUAL_GUIDE.md#convergence-testing) |

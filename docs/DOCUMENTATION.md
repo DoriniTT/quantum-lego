@@ -246,6 +246,86 @@ print(f"SCF Energy: {dos_stage['energy']:.4f} eV")
 **Note:** AiiDA-VASP requires lowercase INCAR keys for the DOS brick.
 For DOS-only stage pipelines, use `quick_dos_sequential(...)` (DOS-focused wrapper over `quick_vasp_sequential`).
 
+**Outputs exposed on the WorkGraph:**
+- SCF: `scf.misc`, `scf.remote`, `scf.retrieved`
+- DOS: `dos.dos`, `dos.projectors`, `dos.misc`, `dos.remote`, `dos.retrieved`
+
+In a sequential workflow, these appear under the stage namespace, e.g.
+`s03_hse_dos.scf.retrieved` and `s03_hse_dos.dos.retrieved`.
+
+**K-points:**
+- `kpoints_spacing`: SCF mesh spacing (A^-1; aiida-vasp internally multiplies by `2π`)
+- `dos_kpoints_spacing`: DOS mesh spacing (defaults to `0.8 * kpoints_spacing`)
+
+### 2b. Hybrid Bands Brick (`hybrid_bands`)
+
+Hybrid-functional band structure stage executed by the `hybrid_bands` brick
+(internally uses `vasp.v2.hybrid_bands`, i.e. `VaspHybridBandsWorkChain`).
+
+This workchain computes the band structure by appending the high-symmetry
+band-path k-points as **zero-weighted k-points** to self-consistent
+calculations (a standard approach for hybrid functionals such as HSE06).
+The band path is automatically **split** into multiple child calculations
+(`bandstructure_split_000`, `bandstructure_split_001`, …) to keep each job size
+manageable.
+
+**Key inputs:**
+- `scf_incar` *(required)*: hybrid INCAR (e.g. `lhfcalc=True`, `hfscreen=0.2`)
+- `band_settings` *(optional)*: subset of aiida-vasp `BandOptions` (e.g.
+  `band_mode`, `band_kpoints_distance`, `symprec`, `kpoints_per_split`)
+- `kpoints_spacing`: SCF mesh spacing (same unit as `vasp`/`dos` bricks)
+
+**Splitting rule (practical):**
+- the effective number of band-path k-points per split is roughly
+  `kpoints_per_split - N_scf_ir`, where `N_scf_ir` is the number of irreducible
+  SCF k-points generated from `kpoints_spacing`.
+
+**Outputs exposed on the WorkGraph:**
+- `bands.band_structure` (BandsData)
+- `bands.primitive_structure` (StructureData)
+- `bands.seekpath_parameters` (Dict)
+
+**Important limitation (aiida-vasp 5.x):**
+`VaspHybridBandsWorkChain` does **not** run a separate DOS step, even if
+`band_settings.run_dos=True` or a `dos` namespace is provided.
+For hybrid DOS, add a separate `dos` stage using hybrid INCAR + `ismear=-5`
+(see example below).
+
+**Important limitation (Quantum Lego wrapper):**
+`hybrid_reuse_wavecar` must be `False`, since the Quantum Lego `hybrid_bands`
+brick does not expose the internal `relax` namespace of the aiida-vasp workchain.
+
+**Example (HSE06 bands + DOS in one sequential WorkGraph):**
+```python
+stages = [
+    {
+        'name': 'hse_bands',
+        'type': 'hybrid_bands',
+        'structure_from': 'input',
+        'scf_incar': {'lhfcalc': True, 'hfscreen': 0.2, 'gga': 'PE', ...},
+        'band_settings': {
+            'band_mode': 'seekpath-aiida',
+            'band_kpoints_distance': 0.05,
+            'kpoints_per_split': 90,
+            'hybrid_reuse_wavecar': False,
+        },
+        'kpoints_spacing': 0.05,
+    },
+    {
+        'name': 'hse_dos',
+        'type': 'dos',
+        'structure': structure,  # explicit structure (hybrid_bands does not expose one)
+        'scf_incar': {'lhfcalc': True, 'hfscreen': 0.2, 'gga': 'PE', ...},
+        'dos_incar': {'ismear': -5, 'nedos': 2000, 'lhfcalc': True, ...},
+        'kpoints_spacing': 0.05,
+        'dos_kpoints_spacing': 0.04,
+    },
+]
+```
+
+Full runnable example:
+- `examples/07_advanced_vasp/hybrid_bands_and_dos_sno2.py`
+
 ### 3. Batch Brick (`batch`)
 
 Run multiple VASP calculations in parallel with per-structure parameter variations.
