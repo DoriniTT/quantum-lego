@@ -103,11 +103,10 @@ def get_brick_module(brick_type: str):
 def resolve_structure_from(structure_from: str, context: dict):
     """Resolve a structure socket from a previous stage.
 
-    Only VASP, DIMER, AIMD, QE, CP2K, NEB, and o2_reference_energy stages produce a meaningful
-    structure output.
-    Referencing a non-VASP/AIMD/QE/CP2K stage (dos, batch, bader, convergence,
-    thickness, hubbard_response, hubbard_analysis) raises an error
-    because those bricks don't produce structures.
+    Only VASP, DIMER, AIMD, QE, CP2K, NEB, o2_reference_energy, birch_murnaghan,
+    and birch_murnaghan_refine stages produce a meaningful structure output.
+    Referencing a non-structure-producing stage (dos, batch, bader, convergence,
+    thickness, hubbard_response, hubbard_analysis) raises an error.
 
     Use ``structure_from='input'`` to reference the original input structure
     passed to ``quick_vasp_sequential``. This is useful when the previous stage
@@ -143,12 +142,16 @@ def resolve_structure_from(structure_from: str, context: dict):
     elif ref_stage_type == 'o2_reference_energy':
         # o2_reference_energy exposes a dummy O2 StructureData via a calcfunction
         return stage_tasks[structure_from]['structure'].outputs.result
+    elif ref_stage_type in ('birch_murnaghan', 'birch_murnaghan_refine'):
+        # Both BM bricks expose their volume-optimised structure via the
+        # 'recommend' task (build_recommended_structure calcfunction).
+        return stage_tasks[structure_from]['recommend'].outputs.result
     else:
         # Non-structure-producing bricks
         raise ValueError(
             f"structure_from='{structure_from}' references a '{ref_stage_type}' "
             f"stage, which doesn't produce a structure output. "
-            f"Point to a VASP, AIMD, QE, CP2K, or NEB stage instead."
+            f"Point to a VASP, AIMD, QE, CP2K, NEB, or birch_murnaghan stage instead."
         )
 
 
