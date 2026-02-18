@@ -1,0 +1,262 @@
+name: Review Documentation
+
+# Reviews and improves the project documentation for accuracy and completeness.
+# Primary engine: Claude Sonnet 4.6 via Claude AI Pro subscription.
+# Alternative engine: GitHub Copilot with gpt-codex-5.3 (opt-in via input).
+
+on:
+  workflow_dispatch:
+    inputs:
+      use_copilot:
+        description: >
+          Use GitHub Copilot (gpt-codex-5.3) instead of Claude Sonnet 4.6.
+          Requires a GitHub Copilot subscription and access to GitHub Models.
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Job 1: Claude Sonnet 4.6 (default)
+  # ──────────────────────────────────────────────
+  claude-docs-review:
+    name: Claude Sonnet 4.6 — Documentation Review
+    if: ${{ !inputs.use_copilot }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # Allow Claude to commit doc improvements
+      pull-requests: write   # Allow Claude to open PRs for larger changes
+      issues: write          # Allow Claude to create summary issues
+      id-token: write        # Required by claude-code-action
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Review documentation (Claude Sonnet 4.6)
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          claude_args: "--model claude-sonnet-4-6"
+          prompt: |
+            You are reviewing the quantum-lego Python library for computational chemistry workflows.
+            Your task is to review the documentation for accuracy, completeness, and clarity.
+
+            ## Documentation files to review
+
+            Read all of the following:
+            - `README.md`                     — project overview and quick API reference
+            - `docs/DOC_INDEX.md`             — navigation guide and learning paths
+            - `docs/QUICK_START.md`           — 5-minute beginner tutorial
+            - `docs/DOCUMENTATION.md`         — complete reference (1150+ lines)
+            - `docs/VISUAL_GUIDE.md`          — Mermaid diagram guide
+            - `docs/BRICK_CONNECTIONS.md`     — brick connection visual guide
+            - `AGENTS.md`                     — developer guide and architecture
+
+            Also read these source files to cross-check documentation accuracy:
+            - `quantum_lego/core/__init__.py`            — public API exports
+            - `quantum_lego/core/bricks/connections.py`  — connection system
+            - `pyproject.toml`                           — project metadata and dependencies
+
+            ## Review checklist
+
+            1. **Accuracy** – cross-check all documented APIs, class names, function
+               signatures, and parameter names against the actual source code. Flag
+               any that are outdated or incorrect.
+
+            2. **Completeness** – identify public API symbols (in `__init__.py`) that
+               have no documentation, or bricks that are missing from the docs.
+
+            3. **Quick Start accuracy** – verify that every code example in
+               `docs/QUICK_START.md` would actually run with the current API.
+
+            4. **Mermaid diagrams** – check that the diagrams in `docs/VISUAL_GUIDE.md`
+               and `docs/BRICK_CONNECTIONS.md` accurately reflect current brick
+               relationships and workflow patterns.
+
+            5. **Clarity** – flag sections that are ambiguous, overly technical for
+               their intended audience, or missing context. Suggest concrete rewrites.
+
+            6. **Cross-references** – ensure links between docs files, and links from
+               README to docs, are correct and not broken.
+
+            7. **AGENTS.md** – check that the developer guide reflects the actual
+               project structure, contribution workflow, and testing instructions.
+
+            ## Actions to take
+
+            - Fix typos, broken links, and minor inaccuracies directly.
+            - Update API references that are out of date (prefer small, targeted edits).
+            - For large rewrites or structural changes, open a pull request.
+            - After all changes, create a GitHub issue titled
+              "Documentation Review — <date>" with:
+              * Overall documentation health assessment (score out of 10 per file)
+              * List of changes made (with file:line references)
+              * List of identified gaps still needing human attention
+              * Recommended priority order for addressing remaining issues
+              * Label the issue: `review`, `documentation`
+
+  # ──────────────────────────────────────────────
+  # Job 2: GitHub Copilot / gpt-codex-5.3 (optional)
+  # ──────────────────────────────────────────────
+  copilot-docs-review:
+    name: GitHub Copilot (gpt-codex-5.3) — Documentation Review
+    if: ${{ inputs.use_copilot }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Review documentation with GitHub Copilot (gpt-codex-5.3)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          python3 << 'EOF'
+          import json, os, textwrap, urllib.request, urllib.error
+          from pathlib import Path
+
+          TOKEN  = os.environ["GITHUB_TOKEN"]
+          REPO   = os.environ["REPO"]
+          RUN_ID = os.environ["RUN_ID"]
+          MODEL  = "gpt-codex-5.3"
+          API_URL = "https://models.inference.ai.azure.com/chat/completions"
+
+          # ── Collect documentation files (truncated to stay within token budget) ──
+          DOC_FILES = [
+              ("README.md",                    4_000),
+              ("docs/QUICK_START.md",          3_000),
+              ("docs/DOC_INDEX.md",            2_000),
+              ("docs/DOCUMENTATION.md",        5_000),  # large file — sample only
+              ("docs/BRICK_CONNECTIONS.md",    3_000),
+              ("docs/VISUAL_GUIDE.md",         2_000),
+              ("AGENTS.md",                    2_000),
+          ]
+
+          sections = []
+          for path, limit in DOC_FILES:
+              try:
+                  raw = Path(path).read_text()
+                  snippet = raw[:limit] + ("\n\n...(truncated)" if len(raw) > limit else "")
+                  sections.append(f"### `{path}` ({len(raw):,} chars total)\n\n{snippet}")
+              except FileNotFoundError:
+                  sections.append(f"### `{path}`\n_(file not found)_")
+
+          # Add public API surface for cross-checking
+          try:
+              api_raw = Path("quantum_lego/core/__init__.py").read_text()
+              api_snippet = api_raw[:3_000] + ("\n...(truncated)" if len(api_raw) > 3_000 else "")
+              sections.append(f"### `quantum_lego/core/__init__.py` (public API)\n```python\n{api_snippet}\n```")
+          except FileNotFoundError:
+              pass
+
+          context = "\n\n---\n\n".join(sections)
+
+          user_prompt = textwrap.dedent(f"""
+              You are reviewing the documentation of the quantum-lego Python library,
+              a modular framework for computational chemistry workflows (AiiDA-based,
+              supporting VASP, Quantum ESPRESSO, and CP2K).
+
+              ## Documentation content (samples)
+
+              {context}
+
+              ## Review tasks
+
+              1. **Accuracy** – identify any documented APIs, class names, or parameters
+                 that appear to conflict with the actual public API shown in `__init__.py`.
+
+              2. **Completeness** – list any public symbols from `__init__.py` that appear
+                 to have no documentation coverage.
+
+              3. **Quick Start** – assess whether the code examples in `QUICK_START.md`
+                 look correct and runnable for a new user.
+
+              4. **Clarity** – flag sections that are ambiguous or likely to confuse
+                 new users. Suggest specific rewrites.
+
+              5. **Cross-references** – note any file links or section references that
+                 look broken or outdated.
+
+              6. **Overall health** – give each documentation file a health score
+                 (1–10) with a brief justification.
+
+              Format your response as a structured GitHub issue body (Markdown).
+              Include a summary table (file | score | key issues) and a prioritised
+              action list.
+          """).strip()
+
+          payload = json.dumps({
+              "model": MODEL,
+              "messages": [
+                  {
+                      "role": "system",
+                      "content": (
+                          "You are an expert technical writer and Python developer specialising "
+                          "in scientific computing software, AiiDA workflows, and documentation "
+                          "quality assessment."
+                      ),
+                  },
+                  {"role": "user", "content": user_prompt},
+              ],
+              "max_tokens": 4096,
+              "temperature": 0.2,
+          }).encode()
+
+          # ── Call GitHub Models API ──
+          try:
+              req = urllib.request.Request(
+                  API_URL,
+                  data=payload,
+                  headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"},
+              )
+              with urllib.request.urlopen(req, timeout=120) as resp:
+                  data = json.loads(resp.read())
+              review_body = data["choices"][0]["message"]["content"]
+          except urllib.error.HTTPError as exc:
+              review_body = (
+                  f"> **GitHub Models API error**: `{exc.code} {exc.reason}`\n\n"
+                  f"The model `{MODEL}` may not be available under your GitHub Copilot subscription "
+                  f"or via GitHub Models. Please verify the model name and your subscription tier.\n\n"
+                  f"Manual review of `docs/` and `README.md` is required."
+              )
+          except Exception as exc:
+              review_body = f"> **Unexpected error**: {exc}\n\nManual review required."
+
+          issue_body = (
+              f"## Documentation Review\n\n"
+              f"_Generated by GitHub Copilot model `{MODEL}` — "
+              f"[workflow run](https://github.com/{REPO}/actions/runs/{RUN_ID})_\n\n"
+              f"{review_body}"
+          )
+
+          # ── Create GitHub issue ──
+          issue_payload = json.dumps({
+              "title": "Documentation Review — GitHub Copilot (gpt-codex-5.3)",
+              "body": issue_body,
+              "labels": ["review", "documentation", "automated"],
+          }).encode()
+
+          issue_req = urllib.request.Request(
+              f"https://api.github.com/repos/{REPO}/issues",
+              data=issue_payload,
+              headers={
+                  "Authorization": f"Bearer {TOKEN}",
+                  "Content-Type": "application/json",
+                  "Accept": "application/vnd.github+json",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              },
+          )
+          with urllib.request.urlopen(issue_req) as resp:
+              issue = json.loads(resp.read())
+          print(f"Issue created: {issue['html_url']}")
+          EOF
