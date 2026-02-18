@@ -37,6 +37,21 @@ QE_PORTS = _connections.QE_PORTS
 CP2K_PORTS = _connections.CP2K_PORTS
 GENERATE_NEB_IMAGES_PORTS = _connections.GENERATE_NEB_IMAGES_PORTS
 NEB_PORTS = _connections.NEB_PORTS
+DIMER_PORTS = _connections.DIMER_PORTS
+HYBRID_BANDS_PORTS = _connections.HYBRID_BANDS_PORTS
+FUKUI_ANALYSIS_PORTS = _connections.FUKUI_ANALYSIS_PORTS
+BIRCH_MURNAGHAN_PORTS = _connections.BIRCH_MURNAGHAN_PORTS
+BIRCH_MURNAGHAN_REFINE_PORTS = _connections.BIRCH_MURNAGHAN_REFINE_PORTS
+CONVERGENCE_PORTS = _connections.CONVERGENCE_PORTS
+THICKNESS_PORTS = _connections.THICKNESS_PORTS
+SURFACE_ENUMERATION_PORTS = _connections.SURFACE_ENUMERATION_PORTS
+SURFACE_TERMINATIONS_PORTS = _connections.SURFACE_TERMINATIONS_PORTS
+DYNAMIC_BATCH_PORTS = _connections.DYNAMIC_BATCH_PORTS
+FORMATION_ENTHALPY_PORTS = _connections.FORMATION_ENTHALPY_PORTS
+O2_REFERENCE_ENERGY_PORTS = _connections.O2_REFERENCE_ENERGY_PORTS
+SURFACE_GIBBS_ENERGY_PORTS = _connections.SURFACE_GIBBS_ENERGY_PORTS
+SELECT_STABLE_SURFACE_PORTS = _connections.SELECT_STABLE_SURFACE_PORTS
+FUKUI_DYNAMIC_PORTS = _connections.FUKUI_DYNAMIC_PORTS
 validate_connections = _connections.validate_connections
 _validate_port_types = _connections._validate_port_types
 _evaluate_conditional = _connections._evaluate_conditional
@@ -305,8 +320,8 @@ class TestPortDeclarations:
     def test_dos_has_no_structure_output(self):
         assert 'structure' not in DOS_PORTS['outputs']
 
-    def test_dos_has_nine_outputs(self):
-        assert len(DOS_PORTS['outputs']) == 9
+    def test_dos_has_eight_outputs(self):
+        assert len(DOS_PORTS['outputs']) == 8
 
     def test_dos_has_scf_remote(self):
         assert 'scf_remote' in DOS_PORTS['outputs']
@@ -1224,7 +1239,7 @@ class TestValidateConnectionsFullPipeline:
             'name': 'dos', 'type': 'dos', 'structure_from': 'dos',
             'scf_incar': {'encut': 520}, 'dos_incar': {'nedos': 3000},
         }
-        with pytest.raises(ValueError, match="unknown stage"):
+        with pytest.raises(ValueError, match="self-reference"):
             validate_connections([relax_stage, dos])
 
     def test_forward_reference_fails(self, relax_stage, dos_stage):
@@ -1918,3 +1933,1024 @@ class TestValidateConnectionsCp2k:
             'restart': None, 'structure_from': 'geo_opt',
         }
         validate_connections([cp2k_geo_opt_stage, vasp_scf])
+
+
+# ===========================================================================
+# Tests for previously untested bricks (15 bricks)
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# TestDimerPortDeclarations
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestDimerPortDeclarations:
+    """Verify DIMER PORTS declarations."""
+
+    def test_all_dimer_output_types_recognized(self):
+        for port_name, port in DIMER_PORTS['outputs'].items():
+            assert port['type'] in PORT_TYPES, \
+                f"Dimer output '{port_name}' has unrecognized type '{port['type']}'"
+
+    def test_all_dimer_input_types_recognized(self):
+        for port_name, port in DIMER_PORTS['inputs'].items():
+            assert port['type'] in PORT_TYPES, \
+                f"Dimer input '{port_name}' has unrecognized type '{port['type']}'"
+
+    def test_dimer_has_six_outputs(self):
+        assert len(DIMER_PORTS['outputs']) == 6
+
+    def test_dimer_outputs_include_structure_conditional(self):
+        assert 'structure' in DIMER_PORTS['outputs']
+        assert 'conditional' in DIMER_PORTS['outputs']['structure']
+
+    def test_dimer_outputs_include_energy(self):
+        assert 'energy' in DIMER_PORTS['outputs']
+
+    def test_dimer_outputs_include_contcar_structure(self):
+        assert 'contcar_structure' in DIMER_PORTS['outputs']
+
+    def test_dimer_has_vibrational_from_input(self):
+        assert 'vibrational_retrieved' in DIMER_PORTS['inputs']
+        assert DIMER_PORTS['inputs']['vibrational_retrieved']['source'] == 'vibrational_from'
+
+    def test_dimer_vibrational_from_requires_vasp(self):
+        assert DIMER_PORTS['inputs']['vibrational_retrieved']['compatible_bricks'] == ['vasp']
+
+    def test_dimer_vibrational_prerequisites_require_ibrion5(self):
+        prereqs = DIMER_PORTS['inputs']['vibrational_retrieved']['prerequisites']
+        assert prereqs['incar']['ibrion'] == 5
+
+    def test_dimer_has_auto_structure_source(self):
+        assert DIMER_PORTS['inputs']['structure']['source'] == 'auto'
+
+    def test_dimer_has_optional_restart(self):
+        assert 'restart_folder' in DIMER_PORTS['inputs']
+        assert DIMER_PORTS['inputs']['restart_folder']['required'] is False
+
+
+# ---------------------------------------------------------------------------
+# TestValidateConnectionsDimer
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestValidateConnectionsDimer:
+    """DIMER-specific connection validation tests."""
+
+    @pytest.fixture
+    def vib_stage(self):
+        """VASP vibrational stage with ibrion=5, nwrite=3."""
+        return {
+            'name': 'vib',
+            'type': 'vasp',
+            'incar': {'encut': 520, 'nsw': 0, 'ibrion': 5, 'nwrite': 3},
+            'restart': None,
+            'retrieve': ['OUTCAR'],
+        }
+
+    def test_single_dimer_stage_fails_missing_vibrational(self):
+        dimer = {
+            'name': 'dimer', 'type': 'dimer',
+            'incar': {'encut': 520, 'nsw': 100},
+            'restart': None,
+        }
+        with pytest.raises(ValueError, match="vibrational_from.*missing"):
+            validate_connections([dimer])
+
+    def test_dimer_with_vibrational_from_vasp_passes(self, relax_stage, vib_stage):
+        dimer = {
+            'name': 'dimer', 'type': 'dimer',
+            'incar': {'encut': 520, 'nsw': 100},
+            'vibrational_from': 'vib',
+            'restart': None,
+        }
+        validate_connections([relax_stage, vib_stage, dimer])
+
+    def test_dimer_vibrational_from_missing_ibrion5_rejected(self, relax_stage):
+        bad_vib = {
+            'name': 'vib', 'type': 'vasp',
+            'incar': {'encut': 520, 'nsw': 0, 'nwrite': 3},
+            'restart': None,
+            'retrieve': ['OUTCAR'],
+        }
+        dimer = {
+            'name': 'dimer', 'type': 'dimer',
+            'incar': {'encut': 520, 'nsw': 100},
+            'vibrational_from': 'vib',
+            'restart': None,
+        }
+        with pytest.raises(ValueError, match="ibrion"):
+            validate_connections([relax_stage, bad_vib, dimer])
+
+    def test_dimer_vibrational_from_dos_rejected(self, relax_stage):
+        dos = {
+            'name': 'dos', 'type': 'dos', 'structure_from': 'relax',
+            'scf_incar': {'encut': 520}, 'dos_incar': {'nedos': 3000},
+        }
+        dimer = {
+            'name': 'dimer', 'type': 'dimer',
+            'incar': {'encut': 520, 'nsw': 100},
+            'vibrational_from': 'dos',
+            'structure_from': 'relax',  # explicit to bypass auto source check
+            'restart': None,
+        }
+        with pytest.raises(ValueError, match="compatible with bricks.*vasp"):
+            validate_connections([relax_stage, dos, dimer])
+
+    def test_dimer_structure_output_can_feed_vasp(self, relax_stage, vib_stage):
+        """Dimer with nsw>0 has conditional structure output."""
+        dimer = {
+            'name': 'dimer', 'type': 'dimer',
+            'incar': {'encut': 520, 'nsw': 100},
+            'vibrational_from': 'vib',
+            'restart': None,
+        }
+        vasp_after = {
+            'name': 'scf', 'type': 'vasp',
+            'incar': {'encut': 520, 'nsw': 0},
+            'restart': None,
+            'structure_from': 'dimer',
+        }
+        validate_connections([relax_stage, vib_stage, dimer, vasp_after])
+
+
+# ---------------------------------------------------------------------------
+# TestHybridBandsPortDeclarations
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestHybridBandsPortDeclarations:
+    """Verify HYBRID_BANDS PORTS declarations."""
+
+    def test_all_hybrid_bands_output_types_recognized(self):
+        for port_name, port in HYBRID_BANDS_PORTS['outputs'].items():
+            assert port['type'] in PORT_TYPES, \
+                f"hybrid_bands output '{port_name}' has unrecognized type '{port['type']}'"
+
+    def test_all_hybrid_bands_input_types_recognized(self):
+        for port_name, port in HYBRID_BANDS_PORTS['inputs'].items():
+            assert port['type'] in PORT_TYPES, \
+                f"hybrid_bands input '{port_name}' has unrecognized type '{port['type']}'"
+
+    def test_hybrid_bands_has_no_energy_output(self):
+        """hybrid_bands does not expose energy as a connectable port."""
+        assert 'energy' not in HYBRID_BANDS_PORTS['outputs']
+
+    def test_hybrid_bands_has_no_structure_output(self):
+        assert 'structure' not in HYBRID_BANDS_PORTS['outputs']
+
+    def test_hybrid_bands_has_band_structure_output(self):
+        assert 'band_structure' in HYBRID_BANDS_PORTS['outputs']
+        assert HYBRID_BANDS_PORTS['outputs']['band_structure']['type'] == 'band_structure'
+
+    def test_hybrid_bands_has_scf_misc_output(self):
+        assert 'scf_misc' in HYBRID_BANDS_PORTS['outputs']
+
+    def test_hybrid_bands_has_structure_from_input(self):
+        assert HYBRID_BANDS_PORTS['inputs']['structure']['source'] == 'structure_from'
+
+
+@pytest.mark.tier1
+class TestValidateConnectionsHybridBands:
+    """hybrid_bands connection validation tests."""
+
+    def test_vasp_then_hybrid_bands_passes(self, relax_stage):
+        hb = {
+            'name': 'hb', 'type': 'hybrid_bands',
+            'structure_from': 'relax',
+            'scf_incar': {'encut': 520},
+            'bands_incar': {'lhfcalc': True},
+        }
+        validate_connections([relax_stage, hb])
+
+    def test_hybrid_bands_missing_structure_from_rejected(self, relax_stage):
+        hb = {
+            'name': 'hb', 'type': 'hybrid_bands',
+            'scf_incar': {'encut': 520},
+        }
+        with pytest.raises(ValueError, match="structure_from.*missing"):
+            validate_connections([relax_stage, hb])
+
+    def test_hybrid_bands_no_energy_output(self, relax_stage):
+        """hybrid_bands has no energy output, so energy_from='hb' would fail."""
+        hb = {
+            'name': 'hb', 'type': 'hybrid_bands',
+            'structure_from': 'relax',
+        }
+        # DOS after hybrid_bands has no energy port to connect to
+        assert 'energy' not in HYBRID_BANDS_PORTS['outputs']
+        validate_connections([relax_stage, hb])
+
+    def test_dos_has_no_energy_output(self):
+        """DOS does not expose energy as a connectable port."""
+        assert 'energy' not in DOS_PORTS['outputs']
+
+
+# ---------------------------------------------------------------------------
+# TestFukuiAnalysisPortDeclarations
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestFukuiAnalysisPortDeclarations:
+    """Verify FUKUI_ANALYSIS PORTS declarations."""
+
+    def test_all_fukui_analysis_port_types_recognized(self):
+        for section in ('inputs', 'outputs'):
+            for port_name, port in FUKUI_ANALYSIS_PORTS[section].items():
+                assert port['type'] in PORT_TYPES
+
+    def test_fukui_analysis_has_batch_from_input(self):
+        assert 'batch_retrieved' in FUKUI_ANALYSIS_PORTS['inputs']
+        assert FUKUI_ANALYSIS_PORTS['inputs']['batch_retrieved']['source'] == 'batch_from'
+
+    def test_fukui_analysis_batch_from_compatible_with_batch(self):
+        compatible = FUKUI_ANALYSIS_PORTS['inputs']['batch_retrieved']['compatible_bricks']
+        assert 'batch' in compatible
+
+    def test_fukui_analysis_has_fukui_chgcar_output(self):
+        assert 'fukui_chgcar' in FUKUI_ANALYSIS_PORTS['outputs']
+        assert FUKUI_ANALYSIS_PORTS['outputs']['fukui_chgcar']['type'] == 'file'
+
+
+@pytest.mark.tier1
+class TestValidateConnectionsFukuiAnalysis:
+    """fukui_analysis connection validation tests."""
+
+    def test_batch_then_fukui_passes(self, relax_stage, batch_stage):
+        batch = {**batch_stage, 'retrieve': ['CHGCAR']}
+        fukui = {
+            'name': 'fukui', 'type': 'fukui_analysis',
+            'batch_from': 'charge_scan',
+        }
+        validate_connections([relax_stage, batch, fukui])
+
+    def test_fukui_missing_batch_from_rejected(self, relax_stage):
+        fukui = {'name': 'fukui', 'type': 'fukui_analysis'}
+        with pytest.raises(ValueError, match="batch_from.*missing"):
+            validate_connections([relax_stage, fukui])
+
+    def test_fukui_batch_from_vasp_rejected(self, relax_stage):
+        fukui = {
+            'name': 'fukui', 'type': 'fukui_analysis',
+            'batch_from': 'relax',
+        }
+        with pytest.raises(ValueError, match="compatible with bricks.*batch"):
+            validate_connections([relax_stage, fukui])
+
+
+# ---------------------------------------------------------------------------
+# TestBirchMurnaghanPortDeclarations
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestBirchMurnaghanPortDeclarations:
+    """Verify BIRCH_MURNAGHAN PORTS declarations."""
+
+    def test_all_birch_murnaghan_port_types_recognized(self):
+        for section in ('inputs', 'outputs'):
+            for port_name, port in BIRCH_MURNAGHAN_PORTS[section].items():
+                assert port['type'] in PORT_TYPES
+
+    def test_birch_murnaghan_has_batch_from_input(self):
+        assert 'batch_energies' in BIRCH_MURNAGHAN_PORTS['inputs']
+        assert BIRCH_MURNAGHAN_PORTS['inputs']['batch_energies']['source'] == 'batch_from'
+
+    def test_birch_murnaghan_batch_from_compatible_with_batch(self):
+        compatible = BIRCH_MURNAGHAN_PORTS['inputs']['batch_energies']['compatible_bricks']
+        assert 'batch' in compatible
+
+    def test_birch_murnaghan_has_eos_result_output(self):
+        assert 'eos_result' in BIRCH_MURNAGHAN_PORTS['outputs']
+        assert BIRCH_MURNAGHAN_PORTS['outputs']['eos_result']['type'] == 'eos_result'
+
+    def test_birch_murnaghan_has_recommended_structure_output(self):
+        assert 'recommended_structure' in BIRCH_MURNAGHAN_PORTS['outputs']
+        assert BIRCH_MURNAGHAN_PORTS['outputs']['recommended_structure']['type'] == 'structure'
+
+
+@pytest.mark.tier1
+class TestBirchMurnaghanRefinePortDeclarations:
+    """Verify BIRCH_MURNAGHAN_REFINE PORTS declarations."""
+
+    def test_all_birch_murnaghan_refine_port_types_recognized(self):
+        for section in ('inputs', 'outputs'):
+            for port_name, port in BIRCH_MURNAGHAN_REFINE_PORTS[section].items():
+                assert port['type'] in PORT_TYPES
+
+    def test_birch_murnaghan_refine_has_eos_from_input(self):
+        assert 'eos_result' in BIRCH_MURNAGHAN_REFINE_PORTS['inputs']
+        assert BIRCH_MURNAGHAN_REFINE_PORTS['inputs']['eos_result']['source'] == 'eos_from'
+
+    def test_birch_murnaghan_refine_eos_from_compatible_with_bm(self):
+        compatible = BIRCH_MURNAGHAN_REFINE_PORTS['inputs']['eos_result']['compatible_bricks']
+        assert 'birch_murnaghan' in compatible
+
+    def test_birch_murnaghan_refine_has_structure_from_input(self):
+        assert 'structure' in BIRCH_MURNAGHAN_REFINE_PORTS['inputs']
+        assert BIRCH_MURNAGHAN_REFINE_PORTS['inputs']['structure']['source'] == 'structure_from'
+
+    def test_birch_murnaghan_refine_has_eos_result_output(self):
+        assert 'eos_result' in BIRCH_MURNAGHAN_REFINE_PORTS['outputs']
+
+    def test_birch_murnaghan_refine_has_recommended_structure_output(self):
+        assert 'recommended_structure' in BIRCH_MURNAGHAN_REFINE_PORTS['outputs']
+
+
+@pytest.mark.tier1
+class TestValidateConnectionsBirchMurnaghan:
+    """BM and BM_refine connection validation tests."""
+
+    def test_batch_then_bm_passes(self, relax_stage, batch_stage):
+        bm = {
+            'name': 'bm', 'type': 'birch_murnaghan',
+            'batch_from': 'charge_scan',
+        }
+        validate_connections([relax_stage, batch_stage, bm])
+
+    def test_bm_missing_batch_from_rejected(self, relax_stage):
+        bm = {'name': 'bm', 'type': 'birch_murnaghan'}
+        with pytest.raises(ValueError, match="batch_from.*missing"):
+            validate_connections([relax_stage, bm])
+
+    def test_bm_batch_from_vasp_rejected(self, relax_stage):
+        bm = {
+            'name': 'bm', 'type': 'birch_murnaghan',
+            'batch_from': 'relax',
+        }
+        with pytest.raises(ValueError, match="compatible with bricks.*batch"):
+            validate_connections([relax_stage, bm])
+
+    def test_bm_then_bm_refine_passes(self, relax_stage, batch_stage):
+        bm = {
+            'name': 'bm', 'type': 'birch_murnaghan',
+            'batch_from': 'charge_scan',
+        }
+        bm_refine = {
+            'name': 'bm_refine', 'type': 'birch_murnaghan_refine',
+            'eos_from': 'bm',
+            'structure_from': 'relax',
+        }
+        validate_connections([relax_stage, batch_stage, bm, bm_refine])
+
+    def test_bm_refine_missing_eos_from_rejected(self, relax_stage):
+        bm_refine = {
+            'name': 'bm_refine', 'type': 'birch_murnaghan_refine',
+            'structure_from': 'relax',
+        }
+        with pytest.raises(ValueError, match="eos_from.*missing"):
+            validate_connections([relax_stage, bm_refine])
+
+    def test_bm_refine_eos_from_wrong_brick_rejected(self, relax_stage):
+        bm_refine = {
+            'name': 'bm_refine', 'type': 'birch_murnaghan_refine',
+            'eos_from': 'relax',
+            'structure_from': 'relax',
+        }
+        with pytest.raises(ValueError, match="needs type 'eos_result'"):
+            validate_connections([relax_stage, bm_refine])
+
+
+# ---------------------------------------------------------------------------
+# TestConvergencePortDeclarations
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestConvergencePortDeclarations:
+    """Verify CONVERGENCE PORTS declarations."""
+
+    def test_all_convergence_port_types_recognized(self):
+        for section in ('inputs', 'outputs'):
+            for port_name, port in CONVERGENCE_PORTS[section].items():
+                assert port['type'] in PORT_TYPES
+
+    def test_convergence_has_optional_structure_from(self):
+        assert 'structure' in CONVERGENCE_PORTS['inputs']
+        assert CONVERGENCE_PORTS['inputs']['structure']['required'] is False
+
+    def test_convergence_has_three_outputs(self):
+        assert len(CONVERGENCE_PORTS['outputs']) == 3
+        for key in ('cutoff_analysis', 'kpoints_analysis', 'recommendations'):
+            assert key in CONVERGENCE_PORTS['outputs']
+
+    def test_convergence_has_no_structure_output(self):
+        assert 'structure' not in CONVERGENCE_PORTS['outputs']
+
+
+@pytest.mark.tier1
+class TestValidateConnectionsConvergence:
+    """convergence connection validation tests."""
+
+    def test_single_convergence_stage_passes(self):
+        conv = {
+            'name': 'conv', 'type': 'convergence',
+        }
+        warnings = validate_connections([conv])
+        assert isinstance(warnings, list)
+
+    def test_convergence_with_structure_from_passes(self, relax_stage):
+        conv = {
+            'name': 'conv', 'type': 'convergence',
+            'structure_from': 'relax',
+        }
+        validate_connections([relax_stage, conv])
+
+    def test_convergence_structure_from_unknown_rejected(self):
+        conv = {
+            'name': 'conv', 'type': 'convergence',
+            'structure_from': 'nonexistent',
+        }
+        with pytest.raises(ValueError, match="unknown stage"):
+            validate_connections([conv])
+
+
+# ---------------------------------------------------------------------------
+# TestThicknessPortDeclarations
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestThicknessPortDeclarations:
+    """Verify THICKNESS PORTS declarations."""
+
+    def test_all_thickness_port_types_recognized(self):
+        for section in ('inputs', 'outputs'):
+            for port_name, port in THICKNESS_PORTS[section].items():
+                assert port['type'] in PORT_TYPES
+
+    def test_thickness_has_optional_structure_from(self):
+        assert 'structure' in THICKNESS_PORTS['inputs']
+        assert THICKNESS_PORTS['inputs']['structure']['required'] is False
+
+    def test_thickness_has_optional_energy_from(self):
+        assert 'energy' in THICKNESS_PORTS['inputs']
+        assert THICKNESS_PORTS['inputs']['energy']['required'] is False
+        assert THICKNESS_PORTS['inputs']['energy']['source'] == 'energy_from'
+
+    def test_thickness_energy_compatible_with_vasp(self):
+        compatible = THICKNESS_PORTS['inputs']['energy']['compatible_bricks']
+        assert 'vasp' in compatible
+
+    def test_thickness_has_one_output(self):
+        assert len(THICKNESS_PORTS['outputs']) == 1
+        assert 'convergence_results' in THICKNESS_PORTS['outputs']
+
+    def test_thickness_has_no_structure_output(self):
+        assert 'structure' not in THICKNESS_PORTS['outputs']
+
+
+@pytest.mark.tier1
+class TestValidateConnectionsThickness:
+    """thickness connection validation tests."""
+
+    def test_single_thickness_stage_passes(self):
+        thickness = {'name': 'thick', 'type': 'thickness'}
+        warnings = validate_connections([thickness])
+        assert isinstance(warnings, list)
+
+    def test_thickness_with_energy_from_vasp_passes(self, relax_stage):
+        thickness = {
+            'name': 'thick', 'type': 'thickness',
+            'energy_from': 'relax',
+        }
+        validate_connections([relax_stage, thickness])
+
+    def test_thickness_energy_from_dos_rejected(self, relax_stage):
+        """DOS no longer produces energy as a connectable port."""
+        dos = {
+            'name': 'dos', 'type': 'dos', 'structure_from': 'relax',
+            'scf_incar': {'encut': 520}, 'dos_incar': {'nedos': 3000},
+        }
+        thickness = {
+            'name': 'thick', 'type': 'thickness',
+            'energy_from': 'dos',
+        }
+        with pytest.raises(ValueError, match="doesn't produce it"):
+            validate_connections([relax_stage, dos, thickness])
+
+    def test_thickness_energy_from_unknown_rejected(self):
+        thickness = {
+            'name': 'thick', 'type': 'thickness',
+            'energy_from': 'nonexistent',
+        }
+        with pytest.raises(ValueError, match="unknown stage"):
+            validate_connections([thickness])
+
+
+# ---------------------------------------------------------------------------
+# TestSurfaceEnumerationPortDeclarations
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestSurfaceEnumerationPortDeclarations:
+    """Verify SURFACE_ENUMERATION PORTS declarations."""
+
+    def test_all_surface_enumeration_port_types_recognized(self):
+        for section in ('inputs', 'outputs'):
+            for port_name, port in SURFACE_ENUMERATION_PORTS[section].items():
+                assert port['type'] in PORT_TYPES
+
+    def test_surface_enumeration_has_structure_from_input(self):
+        assert SURFACE_ENUMERATION_PORTS['inputs']['structure']['source'] == 'structure_from'
+
+    def test_surface_enumeration_has_surface_families_output(self):
+        assert 'surface_families' in SURFACE_ENUMERATION_PORTS['outputs']
+        assert SURFACE_ENUMERATION_PORTS['outputs']['surface_families']['type'] == 'surface_families'
+
+
+@pytest.mark.tier1
+class TestValidateConnectionsSurfaceEnumeration:
+    """surface_enumeration connection validation tests."""
+
+    def test_vasp_then_surface_enumeration_passes(self, relax_stage):
+        enum = {
+            'name': 'enum', 'type': 'surface_enumeration',
+            'structure_from': 'relax',
+        }
+        validate_connections([relax_stage, enum])
+
+    def test_surface_enumeration_missing_structure_from_rejected(self):
+        enum = {'name': 'enum', 'type': 'surface_enumeration'}
+        with pytest.raises(ValueError, match="structure_from.*missing"):
+            validate_connections([enum])
+
+
+# ---------------------------------------------------------------------------
+# TestSurfaceTerminationsPortDeclarations
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestSurfaceTerminationsPortDeclarations:
+    """Verify SURFACE_TERMINATIONS PORTS declarations."""
+
+    def test_all_surface_terminations_port_types_recognized(self):
+        for section in ('inputs', 'outputs'):
+            for port_name, port in SURFACE_TERMINATIONS_PORTS[section].items():
+                assert port['type'] in PORT_TYPES
+
+    def test_surface_terminations_has_structure_from_input(self):
+        assert SURFACE_TERMINATIONS_PORTS['inputs']['structure']['source'] == 'structure_from'
+
+    def test_surface_terminations_has_structures_output(self):
+        assert 'structures' in SURFACE_TERMINATIONS_PORTS['outputs']
+        assert SURFACE_TERMINATIONS_PORTS['outputs']['structures']['type'] == 'structures'
+
+    def test_surface_terminations_has_manifest_output(self):
+        assert 'manifest' in SURFACE_TERMINATIONS_PORTS['outputs']
+
+
+@pytest.mark.tier1
+class TestValidateConnectionsSurfaceTerminations:
+    """surface_terminations connection validation tests."""
+
+    def test_vasp_then_surface_terminations_passes(self, relax_stage):
+        terms = {
+            'name': 'terms', 'type': 'surface_terminations',
+            'structure_from': 'relax',
+        }
+        validate_connections([relax_stage, terms])
+
+    def test_surface_terminations_missing_structure_from_rejected(self):
+        terms = {'name': 'terms', 'type': 'surface_terminations'}
+        with pytest.raises(ValueError, match="structure_from.*missing"):
+            validate_connections([terms])
+
+
+# ---------------------------------------------------------------------------
+# TestDynamicBatchPortDeclarations
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestDynamicBatchPortDeclarations:
+    """Verify DYNAMIC_BATCH PORTS declarations."""
+
+    def test_all_dynamic_batch_port_types_recognized(self):
+        for section in ('inputs', 'outputs'):
+            for port_name, port in DYNAMIC_BATCH_PORTS[section].items():
+                assert port['type'] in PORT_TYPES
+
+    def test_dynamic_batch_has_structures_from_input(self):
+        assert 'structures' in DYNAMIC_BATCH_PORTS['inputs']
+        assert DYNAMIC_BATCH_PORTS['inputs']['structures']['source'] == 'structures_from'
+
+    def test_dynamic_batch_structures_from_compatible_with_surface_terminations(self):
+        """DYNAMIC_BATCH expects structures-type input from surface_terminations."""
+        # No compatible_bricks constraint declared — type matching enforces this
+        assert DYNAMIC_BATCH_PORTS['inputs']['structures']['type'] == 'structures'
+
+    def test_dynamic_batch_has_structures_output(self):
+        assert 'structures' in DYNAMIC_BATCH_PORTS['outputs']
+        assert DYNAMIC_BATCH_PORTS['outputs']['structures']['type'] == 'structures'
+
+    def test_dynamic_batch_has_energies_output(self):
+        assert 'energies' in DYNAMIC_BATCH_PORTS['outputs']
+        assert DYNAMIC_BATCH_PORTS['outputs']['energies']['type'] == 'energies'
+
+
+@pytest.mark.tier1
+class TestValidateConnectionsDynamicBatch:
+    """dynamic_batch connection validation tests."""
+
+    @pytest.fixture
+    def surface_terminations_stage(self, relax_stage):
+        return {
+            'name': 'terms', 'type': 'surface_terminations',
+            'structure_from': 'relax',
+        }
+
+    def test_surface_terminations_then_dynamic_batch_passes(
+        self, relax_stage, surface_terminations_stage
+    ):
+        db = {
+            'name': 'db', 'type': 'dynamic_batch',
+            'structures_from': 'terms',
+        }
+        validate_connections([relax_stage, surface_terminations_stage, db])
+
+    def test_dynamic_batch_missing_structures_from_rejected(self):
+        db = {'name': 'db', 'type': 'dynamic_batch'}
+        with pytest.raises(ValueError, match="structures_from.*missing"):
+            validate_connections([db])
+
+    def test_dynamic_batch_structures_from_vasp_rejected(self, relax_stage):
+        db = {
+            'name': 'db', 'type': 'dynamic_batch',
+            'structures_from': 'relax',
+        }
+        with pytest.raises(ValueError, match="needs type 'structures'"):
+            validate_connections([relax_stage, db])
+
+
+# ---------------------------------------------------------------------------
+# TestFormationEnthalpyPortDeclarations
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestFormationEnthalpyPortDeclarations:
+    """Verify FORMATION_ENTHALPY PORTS declarations."""
+
+    def test_all_formation_enthalpy_port_types_recognized(self):
+        for section in ('inputs', 'outputs'):
+            for port_name, port in FORMATION_ENTHALPY_PORTS[section].items():
+                assert port['type'] in PORT_TYPES
+
+    def test_formation_enthalpy_has_structure_from_input(self):
+        assert FORMATION_ENTHALPY_PORTS['inputs']['structure']['source'] == 'structure_from'
+
+    def test_formation_enthalpy_has_energy_from_input(self):
+        assert 'energy' in FORMATION_ENTHALPY_PORTS['inputs']
+        assert FORMATION_ENTHALPY_PORTS['inputs']['energy']['source'] == 'energy_from'
+        assert FORMATION_ENTHALPY_PORTS['inputs']['energy']['required'] is True
+
+    def test_formation_enthalpy_has_formation_enthalpy_output(self):
+        assert 'formation_enthalpy' in FORMATION_ENTHALPY_PORTS['outputs']
+        assert FORMATION_ENTHALPY_PORTS['outputs']['formation_enthalpy']['type'] == 'formation_enthalpy'
+
+
+@pytest.mark.tier1
+class TestValidateConnectionsFormationEnthalpy:
+    """formation_enthalpy connection validation tests."""
+
+    def test_vasp_then_formation_enthalpy_passes(self, relax_stage):
+        fe = {
+            'name': 'fe', 'type': 'formation_enthalpy',
+            'structure_from': 'relax',
+            'energy_from': 'relax',
+        }
+        validate_connections([relax_stage, fe])
+
+    def test_formation_enthalpy_missing_energy_from_rejected(self, relax_stage):
+        fe = {
+            'name': 'fe', 'type': 'formation_enthalpy',
+            'structure_from': 'relax',
+        }
+        with pytest.raises(ValueError, match="energy_from.*missing"):
+            validate_connections([relax_stage, fe])
+
+    def test_formation_enthalpy_missing_structure_from_rejected(self, relax_stage):
+        fe = {
+            'name': 'fe', 'type': 'formation_enthalpy',
+            'energy_from': 'relax',
+        }
+        with pytest.raises(ValueError, match="structure_from.*missing"):
+            validate_connections([relax_stage, fe])
+
+
+# ---------------------------------------------------------------------------
+# TestO2ReferenceEnergyPortDeclarations
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestO2ReferenceEnergyPortDeclarations:
+    """Verify O2_REFERENCE_ENERGY PORTS declarations."""
+
+    def test_all_o2_reference_energy_port_types_recognized(self):
+        for section in ('inputs', 'outputs'):
+            for port_name, port in O2_REFERENCE_ENERGY_PORTS[section].items():
+                assert port['type'] in PORT_TYPES
+
+    def test_o2_reference_energy_has_no_inputs(self):
+        """o2_reference_energy takes explicit StructureData/PKs, not stage refs."""
+        assert len(O2_REFERENCE_ENERGY_PORTS['inputs']) == 0
+
+    def test_o2_reference_energy_has_structure_output(self):
+        assert 'structure' in O2_REFERENCE_ENERGY_PORTS['outputs']
+
+    def test_o2_reference_energy_has_energy_output(self):
+        assert 'energy' in O2_REFERENCE_ENERGY_PORTS['outputs']
+
+    def test_o2_reference_energy_has_misc_output(self):
+        assert 'misc' in O2_REFERENCE_ENERGY_PORTS['outputs']
+
+
+@pytest.mark.tier1
+class TestValidateConnectionsO2ReferenceEnergy:
+    """o2_reference_energy connection validation tests."""
+
+    def test_single_o2_reference_energy_stage_passes(self):
+        o2_ref = {
+            'name': 'o2_ref', 'type': 'o2_reference_energy',
+            'h2_structure': object(),
+            'h2o_structure': object(),
+        }
+        warnings = validate_connections([o2_ref])
+        assert isinstance(warnings, list)
+
+    def test_o2_reference_energy_structure_feeds_vasp(self):
+        """o2_reference_energy produces structure output usable by other stages."""
+        o2_ref = {
+            'name': 'o2_ref', 'type': 'o2_reference_energy',
+            'h2_structure': object(),
+            'h2o_structure': object(),
+        }
+        vasp = {
+            'name': 'scf', 'type': 'vasp',
+            'incar': {'encut': 520, 'nsw': 0},
+            'restart': None,
+            'structure_from': 'o2_ref',
+        }
+        validate_connections([o2_ref, vasp])
+
+
+# ---------------------------------------------------------------------------
+# TestSurfaceGibbsEnergyPortDeclarations
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestSurfaceGibbsEnergyPortDeclarations:
+    """Verify SURFACE_GIBBS_ENERGY PORTS declarations."""
+
+    def test_all_surface_gibbs_energy_port_types_recognized(self):
+        for section in ('inputs', 'outputs'):
+            for port_name, port in SURFACE_GIBBS_ENERGY_PORTS[section].items():
+                assert port['type'] in PORT_TYPES
+
+    def test_surface_gibbs_energy_has_five_inputs(self):
+        assert len(SURFACE_GIBBS_ENERGY_PORTS['inputs']) == 5
+
+    def test_surface_gibbs_energy_has_bulk_structure_from(self):
+        assert 'bulk_structure' in SURFACE_GIBBS_ENERGY_PORTS['inputs']
+        assert SURFACE_GIBBS_ENERGY_PORTS['inputs']['bulk_structure']['source'] == 'bulk_structure_from'
+
+    def test_surface_gibbs_energy_has_bulk_energy_from(self):
+        assert 'bulk_energy' in SURFACE_GIBBS_ENERGY_PORTS['inputs']
+        assert SURFACE_GIBBS_ENERGY_PORTS['inputs']['bulk_energy']['source'] == 'bulk_energy_from'
+
+    def test_surface_gibbs_energy_has_summary_output(self):
+        assert 'summary' in SURFACE_GIBBS_ENERGY_PORTS['outputs']
+
+
+@pytest.mark.tier1
+class TestValidateConnectionsSurfaceGibbsEnergy:
+    """surface_gibbs_energy connection validation tests."""
+
+    def test_missing_bulk_structure_from_rejected(self):
+        sge = {
+            'name': 'sge', 'type': 'surface_gibbs_energy',
+            'bulk_energy_from': 'relax',
+            'slab_structures_from': 'db',
+            'slab_energies_from': 'db',
+            'formation_enthalpy_from': 'fe',
+        }
+        with pytest.raises(ValueError, match="bulk_structure_from.*missing"):
+            validate_connections([sge])
+
+    def test_missing_bulk_energy_from_rejected(self, relax_stage):
+        """Provide bulk_structure_from pointing to a valid stage; omit bulk_energy_from."""
+        sge = {
+            'name': 'sge', 'type': 'surface_gibbs_energy',
+            'bulk_structure_from': 'relax',
+            'slab_structures_from': 'db',
+            'slab_energies_from': 'db',
+            'formation_enthalpy_from': 'fe',
+        }
+        with pytest.raises(ValueError, match="bulk_energy_from.*missing"):
+            validate_connections([relax_stage, sge])
+
+
+# ---------------------------------------------------------------------------
+# TestSelectStableSurfacePortDeclarations
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestSelectStableSurfacePortDeclarations:
+    """Verify SELECT_STABLE_SURFACE PORTS declarations."""
+
+    def test_all_select_stable_surface_port_types_recognized(self):
+        for section in ('inputs', 'outputs'):
+            for port_name, port in SELECT_STABLE_SURFACE_PORTS[section].items():
+                assert port['type'] in PORT_TYPES
+
+    def test_select_stable_surface_has_structures_from_input(self):
+        assert 'structures' in SELECT_STABLE_SURFACE_PORTS['inputs']
+        assert SELECT_STABLE_SURFACE_PORTS['inputs']['structures']['source'] == 'structures_from'
+
+    def test_select_stable_surface_has_summary_from_input(self):
+        assert 'summary' in SELECT_STABLE_SURFACE_PORTS['inputs']
+        assert SELECT_STABLE_SURFACE_PORTS['inputs']['summary']['source'] == 'summary_from'
+
+    def test_select_stable_surface_has_structure_output(self):
+        assert 'structure' in SELECT_STABLE_SURFACE_PORTS['outputs']
+        assert SELECT_STABLE_SURFACE_PORTS['outputs']['structure']['type'] == 'structure'
+
+    def test_select_stable_surface_structures_from_compatible_with_dynamic_batch(self):
+        compatible = SELECT_STABLE_SURFACE_PORTS['inputs']['structures']['compatible_bricks']
+        assert 'dynamic_batch' in compatible
+
+    def test_select_stable_surface_summary_from_compatible_with_surface_gibbs_energy(self):
+        compatible = SELECT_STABLE_SURFACE_PORTS['inputs']['summary']['compatible_bricks']
+        assert 'surface_gibbs_energy' in compatible
+
+
+@pytest.mark.tier1
+class TestValidateConnectionsSelectStableSurface:
+    """select_stable_surface connection validation tests."""
+
+    def test_missing_structures_from_rejected(self):
+        sss = {
+            'name': 'sss', 'type': 'select_stable_surface',
+            'summary_from': 'sge',
+        }
+        with pytest.raises(ValueError, match="structures_from.*missing"):
+            validate_connections([sss])
+
+    def test_missing_summary_from_rejected(self):
+        """Both structures_from and summary_from are required."""
+        sss = {
+            'name': 'sss', 'type': 'select_stable_surface',
+            'structures_from': 'db',
+        }
+        # Either "summary_from missing" or "unknown stage" depending on input ordering
+        with pytest.raises(ValueError):
+            validate_connections([sss])
+
+
+# ---------------------------------------------------------------------------
+# TestFukuiDynamicPortDeclarations
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestFukuiDynamicPortDeclarations:
+    """Verify FUKUI_DYNAMIC PORTS declarations."""
+
+    def test_all_fukui_dynamic_port_types_recognized(self):
+        for section in ('inputs', 'outputs'):
+            for port_name, port in FUKUI_DYNAMIC_PORTS[section].items():
+                assert port['type'] in PORT_TYPES
+
+    def test_fukui_dynamic_has_auto_structure_source(self):
+        assert FUKUI_DYNAMIC_PORTS['inputs']['structure']['source'] == 'auto'
+
+    def test_fukui_dynamic_has_eight_retrieved_outputs(self):
+        retrieved_outputs = [
+            k for k, v in FUKUI_DYNAMIC_PORTS['outputs'].items()
+            if v['type'] == 'retrieved'
+        ]
+        assert len(retrieved_outputs) == 8
+
+    def test_fukui_dynamic_outputs_include_minus_neutral(self):
+        assert 'retrieved_minus_neutral' in FUKUI_DYNAMIC_PORTS['outputs']
+
+    def test_fukui_dynamic_outputs_include_plus_neutral(self):
+        assert 'retrieved_plus_neutral' in FUKUI_DYNAMIC_PORTS['outputs']
+
+
+@pytest.mark.tier1
+class TestValidateConnectionsFukuiDynamic:
+    """fukui_dynamic connection validation tests."""
+
+    def test_single_fukui_dynamic_stage_passes(self):
+        fd = {
+            'name': 'fd', 'type': 'fukui_dynamic',
+            'incar': {'encut': 520, 'nsw': 0},
+        }
+        warnings = validate_connections([fd])
+        assert isinstance(warnings, list)
+
+    def test_vasp_then_fukui_dynamic_passes(self, relax_stage):
+        fd = {
+            'name': 'fd', 'type': 'fukui_dynamic',
+            'incar': {'encut': 520, 'nsw': 0},
+            'structure_from': 'relax',
+        }
+        validate_connections([relax_stage, fd])
+
+    def test_fukui_dynamic_feeds_fukui_analysis(self, relax_stage):
+        """fukui_dynamic is compatible with fukui_analysis but the CHGCAR
+        prerequisite check doesn't apply to non-VASP stages — this is a known
+        limitation. The compatible_bricks declaration correctly allows the connection."""
+        assert 'fukui_dynamic' in \
+            FUKUI_ANALYSIS_PORTS['inputs']['batch_retrieved']['compatible_bricks']
+
+
+# ---------------------------------------------------------------------------
+# TestAllBricksRegistered
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestAllBricksRegistered:
+    """All 26 brick types must be in ALL_PORTS registry."""
+
+    def test_all_26_bricks_in_all_ports(self):
+        expected_bricks = {
+            'vasp', 'dimer', 'dos', 'hybrid_bands', 'batch',
+            'fukui_analysis', 'birch_murnaghan', 'birch_murnaghan_refine',
+            'bader', 'convergence', 'thickness', 'hubbard_response',
+            'hubbard_analysis', 'aimd', 'qe', 'cp2k',
+            'generate_neb_images', 'neb', 'surface_enumeration',
+            'surface_terminations', 'dynamic_batch', 'formation_enthalpy',
+            'o2_reference_energy', 'surface_gibbs_energy',
+            'select_stable_surface', 'fukui_dynamic',
+        }
+        assert set(ALL_PORTS.keys()) == expected_bricks
+
+    def test_all_bricks_have_valid_port_types(self):
+        """Every port in every brick must have a recognized type."""
+        for brick_name, ports in ALL_PORTS.items():
+            _validate_port_types(ports, brick_name)
+
+    def test_all_bricks_have_inputs_and_outputs_keys(self):
+        for brick_name, ports in ALL_PORTS.items():
+            assert 'inputs' in ports, f"{brick_name} missing 'inputs'"
+            assert 'outputs' in ports, f"{brick_name} missing 'outputs'"
+
+
+# ---------------------------------------------------------------------------
+# TestDuplicateStageNames
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestDuplicateStageNames:
+    """Duplicate stage names must be detected early."""
+
+    def test_duplicate_stage_name_rejected(self, relax_stage):
+        relax2 = {**relax_stage}  # same name 'relax'
+        with pytest.raises(ValueError, match="Duplicate stage name 'relax'"):
+            validate_connections([relax_stage, relax2])
+
+    def test_unique_stage_names_pass(self, relax_stage):
+        relax2 = {**relax_stage, 'name': 'relax2'}
+        validate_connections([relax_stage, relax2])
+
+
+# ---------------------------------------------------------------------------
+# TestSelfReferenceDetection
+# ---------------------------------------------------------------------------
+
+@pytest.mark.tier1
+class TestSelfReferenceDetection:
+    """Stage self-references must be caught as circular dependencies."""
+
+    def test_vasp_self_structure_from_rejected(self):
+        stage = {
+            'name': 'relax', 'type': 'vasp',
+            'incar': {'encut': 520, 'nsw': 100},
+            'restart': None,
+            'structure_from': 'relax',
+        }
+        with pytest.raises(ValueError, match="self-reference"):
+            validate_connections([stage])
+
+    def test_dos_self_structure_from_rejected(self, relax_stage):
+        dos = {
+            'name': 'dos', 'type': 'dos',
+            'structure_from': 'dos',
+            'scf_incar': {'encut': 520}, 'dos_incar': {'nedos': 3000},
+        }
+        with pytest.raises(ValueError, match="self-reference"):
+            validate_connections([relax_stage, dos])
+
+    def test_bader_self_charge_from_rejected(self, relax_stage):
+        bader = {
+            'name': 'bader', 'type': 'bader',
+            'charge_from': 'bader',
+        }
+        with pytest.raises(ValueError, match="self-reference"):
+            validate_connections([relax_stage, bader])
+
+    def test_no_self_reference_passes(self, relax_stage):
+        dos = {
+            'name': 'dos', 'type': 'dos',
+            'structure_from': 'relax',
+            'scf_incar': {'encut': 520}, 'dos_incar': {'nedos': 3000},
+        }
+        validate_connections([relax_stage, dos])
