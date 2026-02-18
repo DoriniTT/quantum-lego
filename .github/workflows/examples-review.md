@@ -33,11 +33,6 @@ tools:
   - cat docs/QUICK_START.md
   - cat .github/workflows/examples-review.md
   - gh aw compile examples-review
-  - git add .github/workflows/
-  - "git commit:*"
-  - "git branch:*"
-  - "git checkout:*"
-  - git status
   edit:
   github:
     toolsets:
@@ -264,19 +259,19 @@ Only improve what genuinely needs improving. Do not change things that worked we
 Use the edit tool to update `.github/workflows/examples-review.md` directly.
 Keep edits focused and purposeful — this is not a full rewrite.
 
-### 7.4 Regenerate the lock file
+### 7.4 Regenerate the lock file (optional)
 
-Run the compile command to regenerate `examples-review.lock.yml` from the updated prompt:
+Attempt to regenerate `examples-review.lock.yml` from the updated prompt:
 
 ```bash
 gh aw compile examples-review
 ```
 
-If the command is unavailable in this environment, skip this step and note it in the PR body.
+If the command is unavailable or fails, skip this step — note it in the PR body and the reviewer can run it after merge. Do **not** attempt any `git add`, `git commit`, or `git push` commands — those are not available in this environment.
 
 ### 7.5 Create a self-improvement pull request
 
-Create a pull request containing the updated `examples-review.md` (and `examples-review.lock.yml` if compile succeeded).
+Call `create_pull_request` directly. The safe_outputs job automatically commits all edits you made via the edit tool and opens the PR — you do not need to run any git commands yourself.
 
 PR body must include:
 - A bullet list of exactly what changed in the prompt and why
