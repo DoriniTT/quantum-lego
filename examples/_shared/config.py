@@ -18,6 +18,18 @@ LOCALWORK_OPTIONS: dict[str, Any] = {
     },
 }
 
+OBELIX_OPTIONS: dict[str, Any] = {
+    'resources': {
+        'num_machines': 1,
+        'num_mpiprocs_per_machine': 4,
+    },
+    'custom_scheduler_commands': (
+        '#PBS -l cput=90000:00:00\n'
+        '#PBS -l nodes=1:ppn=88:skylake\n'
+        '#PBS -j oe'
+    ),
+}
+
 SNO2_POTCAR: dict[str, Any] = {
     'family': 'PBE',
     'mapping': {'Sn': 'Sn_d', 'O': 'O'},
