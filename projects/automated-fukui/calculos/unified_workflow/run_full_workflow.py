@@ -3,10 +3,13 @@
 
 Combines five sequential phases into a single WorkGraph submission:
 
-  Phase 1 – Ground state (Birch-Murnaghan EOS + full ionic/cell relax)
-      volume_scan → eos_fit → eos_refine → bulk_relax
-      Produces the true DFT ground-state structure and energy at the
-      equilibrium volume V0.
+  Phase 1 – Ground state (rough relax → BM EOS → full ionic/cell relax)
+      initial_relax → volume_scan → eos_fit → eos_refine → bulk_relax
+      initial_relax (ISIF=3, loose convergence) brings ionic positions and
+      cell to near-equilibrium before the BM scan, ensuring the volume
+      sweep explores the correct energy basin.  eos_refine then uses the
+      pre-relaxed cell as the scaling base for its refined volume points.
+      bulk_relax performs the final tight ionic+cell relaxation at V0.
 
   Phase 2 – Hubbard U (linear response on 2×2×2 supercell)
       hub_ground_state → hub_response → hub_analysis
@@ -32,15 +35,18 @@ Note on parallelism
 -------------------
 WorkGraph detects data dependencies automatically.  Stages that share no
 data edges run simultaneously.  Expected parallel groups at launch:
-  T=0 : volume_scan, hub_ground_state, sn_relax, o2_ref
-  T=1 : eos_fit (after volume_scan)
-  T=2 : eos_refine (after eos_fit), hub_response (after hub_ground_state)
-  T=3 : bulk_relax (after eos_refine), hub_analysis (after hub_response)
-  T=4 : hse_prerelax, enumerate_surfaces, slab_terms  (after bulk_relax)
+  T=0 : initial_relax, hub_ground_state, sn_relax, o2_ref
+  T=1 : volume_scan (after initial_relax)
+         hub_response (after hub_ground_state)
+  T=2 : eos_fit (after volume_scan)
+         hub_analysis (after hub_response)
+  T=3 : eos_refine (after eos_fit)
+  T=4 : bulk_relax (after eos_refine)
+  T=5 : hse_prerelax, enumerate_surfaces, slab_terms  (after bulk_relax)
          dhf  (after bulk_relax + sn_relax + o2_ref)
-  T=5 : hse_bands, hse_dos (after hse_prerelax)
+  T=6 : hse_bands, hse_dos (after hse_prerelax)
          slab_relax (after slab_terms)
-  T=6 : surface_gibbs (after slab_relax + dhf)
+  T=7 : surface_gibbs (after slab_relax + dhf)
 
 Brick restructuring
 -------------------
@@ -126,6 +132,25 @@ ref_h2o = orm.StructureData(ase=read(str(H2O_CIF)))
 # ---------------------------------------------------------------------------
 # INCAR blocks
 # ---------------------------------------------------------------------------
+
+# ── Phase 1: rough pre-relax (ISIF=3, loose convergence) ─────────────────
+# Brings ionic positions and cell shape to near-equilibrium before the BM
+# scan so that volume-scaled structures sit in the correct energy basin.
+# Loose ediff/ediffg keep this stage fast; tight convergence follows later.
+rough_relax_incar = {
+    'encut': 520,
+    'ediff': 1e-4,
+    'ediffg': -0.05,
+    'nsw': 50,
+    'ibrion': 2,
+    'isif': 3,
+    'ismear': 0,
+    'sigma': 0.05,
+    'prec': 'Accurate',
+    'lreal': 'Auto',
+    'lwave': False,
+    'lcharg': False,
+}
 
 # ── Phase 1: BM volume scan (static SCF, very accurate) ──────────────────
 bm_scf_incar = {
@@ -307,10 +332,23 @@ for strain in strains:
 stages = [
 
     # ════════════════════════════════════════════════════════════════════════
-    # PHASE 1 – GROUND STATE (BM EOS + FULL RELAX)
+    # PHASE 1 – GROUND STATE (ROUGH RELAX + BM EOS + FULL RELAX)
     # ════════════════════════════════════════════════════════════════════════
 
-    # 1. Static SCF at 7 volume points (-6 % … +6 %)
+    # 1. Rough ISIF=3 relax – bring positions and cell to near-equilibrium.
+    #    Loose ediff/ediffg keep it fast; the BM scan and final bulk_relax
+    #    provide increasing levels of convergence.
+    {
+        'name': 'initial_relax',
+        'type': 'vasp',
+        'structure_from': 'input',
+        'incar': rough_relax_incar,
+        'kpoints_spacing': 0.03,
+    },
+
+    # 2. Static SCF at 7 volume points (-6 % … +6 %)
+    #    Each calculation carries an explicit pre-computed structure (scaled
+    #    from the input cell), so 'structure_from' acts only as a fallback.
     {
         'name': 'volume_scan',
         'type': 'batch',
@@ -320,7 +358,7 @@ stages = [
         'calculations': volume_calcs,
     },
 
-    # 2. Fit Birch-Murnaghan EOS → V0, E0, B0, B1
+    # 3. Fit Birch-Murnaghan EOS → V0, E0, B0, B1
     {
         'name': 'eos_fit',
         'type': 'birch_murnaghan',
@@ -328,19 +366,21 @@ stages = [
         'volumes': volume_map,
     },
 
-    # 3. Refined BM scan (±2 % / 7 pts around V0) for tighter EOS
+    # 4. Refined BM scan (±2 % / 7 pts around V0) for tighter EOS.
+    #    structure_from='initial_relax' uses the pre-relaxed cell as the
+    #    scaling base, so the refined volume points have the correct shape.
     {
         'name': 'eos_refine',
         'type': 'birch_murnaghan_refine',
         'eos_from': 'eos_fit',
-        'structure_from': 'input',      # original primitive cell for scaling
+        'structure_from': 'initial_relax',  # use pre-relaxed cell for scaling
         'base_incar': bm_scf_incar,
         'kpoints_spacing': 0.03,
         'refine_strain_range': 0.02,
         'refine_n_points': 7,
     },
 
-    # 4. Full ionic + cell relaxation starting from the BM-recommended structure.
+    # 5. Full ionic + cell relaxation starting from the BM-recommended structure.
     #    structure_from='eos_refine' works after the resolve_structure_from fix:
     #    it wires eos_refine's 'recommend' task output → this stage's input.
     {
@@ -355,7 +395,7 @@ stages = [
     # PHASE 2 – HUBBARD U  (independent of Phase 1 structure chain)
     # ════════════════════════════════════════════════════════════════════════
 
-    # 5. Ground state on the split 2×2×2 supercell (LDAUU=0, lorbit=11)
+    # 6. Ground state on the split 2×2×2 supercell (LDAUU=0, lorbit=11)
     {
         'name': 'hub_ground_state',
         'type': 'vasp',
@@ -379,7 +419,7 @@ stages = [
         'retrieve': ['OUTCAR'],
     },
 
-    # 6. Response calculations at 8 perturbation potentials (±0.05 … ±0.20 eV)
+    # 7. Response calculations at 8 perturbation potentials (±0.05 … ±0.20 eV)
     {
         'name': 'hub_response',
         'type': 'hubbard_response',
@@ -392,7 +432,7 @@ stages = [
         'kpoints_spacing': 0.03,
     },
 
-    # 7. Linear regression → Hubbard U (eV) + R²
+    # 8. Linear regression → Hubbard U (eV) + R²
     {
         'name': 'hub_analysis',
         'type': 'hubbard_analysis',
@@ -407,7 +447,7 @@ stages = [
     # Uses the properly relaxed bulk_relax structure from Phase 1.
     # ════════════════════════════════════════════════════════════════════════
 
-    # 8. GGA PBE static on relaxed structure (saves WAVECAR for optional reuse)
+    # 9. GGA PBE static on relaxed structure (saves WAVECAR for optional reuse)
     {
         'name': 'hse_prerelax',
         'type': 'vasp',
@@ -416,7 +456,7 @@ stages = [
         'kpoints_spacing': 0.05,
     },
 
-    # 9. HSE06 band structure (zero-weight k-points along high-symmetry path)
+    # 10. HSE06 band structure (zero-weight k-points along high-symmetry path)
     {
         'name': 'hse_bands',
         'type': 'hybrid_bands',
@@ -436,7 +476,7 @@ stages = [
         'kpoints_spacing': 0.05,
     },
 
-    # 10. HSE06 DOS (separate stage: VaspHybridBandsWorkChain does not run DOS)
+    # 11. HSE06 DOS (separate stage: VaspHybridBandsWorkChain does not run DOS)
     {
         'name': 'hse_dos',
         'type': 'dos',
@@ -452,7 +492,7 @@ stages = [
     # Confirms all distinct low-index surfaces of the relaxed structure.
     # ════════════════════════════════════════════════════════════════════════
 
-    # 11. Enumerate symmetrically distinct surfaces (max_index=1 → 5 for SnO2)
+    # 12. Enumerate symmetrically distinct surfaces (max_index=1 → 5 for SnO2)
     {
         'name': 'enumerate_surfaces',
         'type': 'surface_enumeration',
@@ -465,7 +505,7 @@ stages = [
     # PHASE 5 – SURFACE THERMODYNAMICS FOR SnO2(110)
     # ════════════════════════════════════════════════════════════════════════
 
-    # 12. Relax Sn metal reference (independent – starts at T=0)
+    # 13. Relax Sn metal reference (independent – starts at T=0)
     {
         'name': 'sn_relax',
         'type': 'vasp',
@@ -474,7 +514,7 @@ stages = [
         'kpoints_spacing': 0.03,
     },
 
-    # 13. O2 reference energy via water-splitting: E_ref(O2) = E(H2O) - E(H2)
+    # 14. O2 reference energy via water-splitting: E_ref(O2) = E(H2O) - E(H2)
     #     (independent – starts at T=0 in parallel with volume_scan)
     {
         'name': 'o2_ref',
@@ -486,7 +526,7 @@ stages = [
         'kpoints': [1, 1, 1],
     },
 
-    # 14. Generate all SnO2(110) slab terminations (18 Å slab, 15 Å vacuum)
+    # 15. Generate all SnO2(110) slab terminations (18 Å slab, 15 Å vacuum)
     {
         'name': 'slab_terms',
         'type': 'surface_terminations',
@@ -500,7 +540,7 @@ stages = [
         'reorient_lattice': True,
     },
 
-    # 15. Relax all terminations in parallel (dynamic fan-out)
+    # 16. Relax all terminations in parallel (dynamic fan-out)
     {
         'name': 'slab_relax',
         'type': 'dynamic_batch',
@@ -509,7 +549,7 @@ stages = [
         'kpoints_spacing': 0.05,
     },
 
-    # 16. Formation enthalpy ΔHf(SnO2) from Sn and O2 references
+    # 17. Formation enthalpy ΔHf(SnO2) from Sn and O2 references
     {
         'name': 'dhf',
         'type': 'formation_enthalpy',
@@ -521,7 +561,7 @@ stages = [
         },
     },
 
-    # 17. Surface Gibbs free energies γ(ΔμSn, ΔμO) for each termination
+    # 18. Surface Gibbs free energies γ(ΔμSn, ΔμO) for each termination
     {
         'name': 'surface_gibbs',
         'type': 'surface_gibbs_energy',
