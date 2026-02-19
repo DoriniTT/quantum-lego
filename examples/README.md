@@ -8,6 +8,23 @@ This directory is organized as a numbered learning path from simple to advanced 
 - `examples/_shared/structures.py`: convenience loaders (`load_sno2`, `load_sno2_pnnm`, `load_nio`, `create_si_structure`).
 - `examples/structures/`: canonical `.vasp` inputs used across examples.
 
+## Category Overview
+
+| # | Category | Description |
+|---|----------|-------------|
+| 01 | `getting_started` | Smallest runnable examples: single VASP calculation, result checking |
+| 02 | `dos` | Density of states workflows |
+| 03 | `batch` | Parallel single-point calculations with varying parameters |
+| 04 | `sequential` | Multi-stage sequential pipelines |
+| 05 | `convergence` | ENCUT and k-point convergence testing |
+| 06 | `surface` | Slab and surface workflows, thickness convergence |
+| 07 | `advanced_vasp` | Specialized VASP workflows: Hubbard U, Bader, NEB, hybrid functionals |
+| 08 | `aimd` | Ab initio molecular dynamics |
+| 09 | `other_codes` | Non-VASP backends: Quantum ESPRESSO, CP2K |
+| 10 | `utilities` | Output formatting, result extraction, error handling |
+| 11 | `neb` | Nudged Elastic Band (NEB) and CI-NEB pathways |
+| 12 | `dimer` | Improved Dimer Method (IDM) for transition-state refinement |
+
 ## Progression
 
 1. `01_getting_started`
@@ -21,7 +38,7 @@ This directory is organized as a numbered learning path from simple to advanced 
 9. `09_other_codes`
 10. `10_utilities`
 11. `11_neb` — nudged elastic band (NEB/CI-NEB pathways)
-11. `12_dimer` — Improved Dimer Method (IDM) for transition-state refinement: vibrational analysis → IDM TS search (IBRION=44) → TS verification
+12. `12_dimer` — Improved Dimer Method (IDM) for transition-state refinement: vibrational analysis → IDM TS search (IBRION=44) → TS verification
 
 ## Quick Start
 

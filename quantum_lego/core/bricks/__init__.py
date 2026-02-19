@@ -178,8 +178,11 @@ def resolve_structure_from(structure_from: str, context: dict):
 def resolve_energy_from(energy_from: str, context: dict):
     """Resolve an energy socket from a previous stage.
 
-    Only VASP, DIMER, AIMD, CP2K, and o2_reference_energy stages produce a meaningful energy output.
-    Referencing a non-VASP/AIMD stage raises an error.
+    Only VASP, DIMER, AIMD, QE, CP2K, and o2_reference_energy stages produce
+    a connectable energy output (exposed via an energy calcfunction task).
+    DOS and hybrid_bands stages have energy accessible via get_stage_results()
+    but do not expose it as a connectable WorkGraph port.
+    Referencing an unsupported stage raises an error.
 
     Args:
         energy_from: Name of the stage to get energy from.
@@ -189,17 +192,17 @@ def resolve_energy_from(energy_from: str, context: dict):
         Energy socket (Float or task output socket).
 
     Raises:
-        ValueError: If the referenced stage doesn't produce an energy.
+        ValueError: If the referenced stage doesn't produce a connectable energy.
     """
     stage_tasks = context['stage_tasks']
     stage_types = context['stage_types']
 
     ref_stage_type = stage_types.get(energy_from, 'vasp')
-    if ref_stage_type in ('vasp', 'dimer', 'aimd', 'cp2k', 'o2_reference_energy'):
+    if ref_stage_type in ('vasp', 'dimer', 'aimd', 'cp2k', 'qe', 'o2_reference_energy'):
         return stage_tasks[energy_from]['energy'].outputs.result
     else:
         raise ValueError(
             f"energy_from='{energy_from}' references a '{ref_stage_type}' "
-            f"stage, which doesn't produce an energy output. "
-            f"Point to a VASP, AIMD, or CP2K stage instead."
+            f"stage, which doesn't produce a connectable energy output. "
+            f"Point to a VASP, AIMD, QE, or CP2K stage instead."
         )
