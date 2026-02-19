@@ -4,20 +4,25 @@ These tests verify the console module's Rich integration and formatting function
 """
 
 import pytest
-import sys
 import os
+import importlib.util
 from io import StringIO
 from rich.console import Console
 
-# Add the quantum_lego/core directory to the path to import console directly
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'quantum_lego', 'core'))
+# Import console.py directly using importlib (avoids sys.path manipulation and
+# prevents triggering quantum_lego.core.__init__ which pulls in AiiDA).
+_console_path = os.path.normpath(os.path.join(
+    os.path.dirname(__file__), os.pardir,
+    'quantum_lego', 'core', 'console.py',
+))
+_spec = importlib.util.spec_from_file_location('quantum_lego.core.console', _console_path)
+console_module = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(console_module)
 
 
 @pytest.mark.tier1
 def test_console_module_imports():
     """Test that console module imports without errors."""
-    import console as console_module
-
     assert hasattr(console_module, 'console')
     assert hasattr(console_module, 'QUANTUM_LEGO_THEME')
     assert hasattr(console_module, 'print_calculation_header')
@@ -31,7 +36,6 @@ def test_console_module_imports():
 @pytest.mark.tier1
 def test_console_theme_colors():
     """Test that custom theme has expected color definitions."""
-    import console as console_module
     QUANTUM_LEGO_THEME = console_module.QUANTUM_LEGO_THEME
 
     # Check key theme styles exist
@@ -49,8 +53,6 @@ def test_console_theme_colors():
 @pytest.mark.tier1
 def test_console_singleton():
     """Test that console is properly initialized as singleton."""
-    import console as console_module
-
     assert isinstance(console_module.console, Console)
     # Console has _theme as private attribute in Rich
     assert console_module.console is not None
@@ -213,8 +215,6 @@ def test_print_field(capsys):
 @pytest.mark.tier1
 def test_create_results_table():
     """Test results table creation."""
-    import console as console_module
-
     table = console_module.create_results_table(title="Test Results")
     assert table is not None
     assert table.title == "Test Results"
@@ -264,8 +264,6 @@ def test_console_non_tty_fallback():
 @pytest.mark.tier1
 def test_console_functions_dont_crash():
     """Integration test: ensure all console functions can be called without errors."""
-    import console as console_module
-
     # These should not raise any exceptions
     # We're using capsys to capture output but we don't verify it
     # Just checking that functions execute without errors

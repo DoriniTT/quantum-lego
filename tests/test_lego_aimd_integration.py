@@ -209,6 +209,7 @@ class TestAimdTrajectoryConcatenation:
 # ============================================================================
 
 @pytest.mark.tier3
+@pytest.mark.localwork
 @pytest.mark.requires_aiida
 class TestAimdResultExtraction:
     """Validate result extraction from a completed AIMD calculation (Si)."""
