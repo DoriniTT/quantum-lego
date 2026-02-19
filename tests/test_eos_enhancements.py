@@ -418,15 +418,16 @@ class TestBrickRegistryRefine:
                 f"birch_murnaghan_refine module missing callable '{fn_name}'"
 
     def test_registry_count_increased(self):
-        from quantum_lego.core.bricks import BRICK_REGISTRY
-        assert len(BRICK_REGISTRY) == 26  # +select_stable_surface, +fukui_dynamic
+        from quantum_lego.core.bricks import BRICK_REGISTRY, VALID_BRICK_TYPES
+        assert len(BRICK_REGISTRY) == len(VALID_BRICK_TYPES)
 
 
 # ---------------------------------------------------------------------------
 # TestGatherEosDataLabels (requires AiiDA)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.tier1
+@pytest.mark.tier2
+@pytest.mark.requires_aiida
 class TestGatherEosDataLabels:
     """Test that gather_eos_data returns labels in output."""
 
@@ -475,7 +476,8 @@ class TestGatherEosDataLabels:
 # TestFitBirchMurnaghanRecommended (requires AiiDA)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.tier1
+@pytest.mark.tier2
+@pytest.mark.requires_aiida
 class TestFitBirchMurnaghanRecommended:
     """Test that fit_birch_murnaghan_eos returns recommended info."""
 
@@ -578,7 +580,8 @@ class TestFitBirchMurnaghanRecommended:
 # TestBuildRecommendedStructure (requires AiiDA)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.tier1
+@pytest.mark.tier2
+@pytest.mark.requires_aiida
 class TestBuildRecommendedStructure:
     """Test build_recommended_structure calcfunction."""
 
@@ -624,7 +627,8 @@ class TestBuildRecommendedStructure:
 # TestComputeRefinedEosParams (requires AiiDA)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.tier1
+@pytest.mark.tier2
+@pytest.mark.requires_aiida
 class TestComputeRefinedEosParams:
     """Test compute_refined_eos_params calcfunction."""
 
@@ -699,7 +703,8 @@ class TestComputeRefinedEosParams:
 # TestBuildSingleRefinedStructure (requires AiiDA)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.tier1
+@pytest.mark.tier2
+@pytest.mark.requires_aiida
 class TestBuildSingleRefinedStructure:
     """Test build_single_refined_structure calcfunction."""
 

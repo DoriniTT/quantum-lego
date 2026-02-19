@@ -28,8 +28,7 @@ from aiida import orm  # noqa: E402
 # TIER 2 — Validation tests (no VASP needed)
 # ============================================================================
 
-@pytest.mark.tier2
-@pytest.mark.requires_aiida
+@pytest.mark.tier1
 class TestSequentialValidation:
     """Test sequential workflow validation logic."""
 
@@ -86,8 +85,7 @@ class TestSequentialValidation:
         _validate_stages(stages)
 
 
-@pytest.mark.tier2
-@pytest.mark.requires_aiida
+@pytest.mark.tier1
 class TestSequentialIndexing:
     """Test that sequential pipelines use correct output naming."""
 
@@ -165,6 +163,7 @@ class TestSequentialImportsAndBasic:
 # ============================================================================
 
 @pytest.mark.tier3
+@pytest.mark.localwork
 @pytest.mark.requires_aiida
 class TestSequentialResultExtraction:
     """Validate result extraction from a completed sequential pipeline (Si relax→SCF)."""

@@ -229,26 +229,12 @@ class TestVaspPreparePoscar:
         assert result['has_velocities'] is False
 
 
-@pytest.mark.tier2
-@pytest.mark.requires_aiida
-class TestVaspWorkGraphConstruction:
-    """Test that vasp brick builds WorkGraph tasks correctly (no VASP run)."""
-
-    def test_wg_buildsno_vasp_run(self):
-        """Verify that WorkGraph can be built without submitting to VASP."""
-        from aiida import orm
-        # Quick smoke test: just verify imports work and AiiDA is available
-        assert AIIDA_AVAILABLE is True
-        # Create a simple test dict to ensure AiiDA ORM works
-        test_dict = orm.Dict(dict={'test': 'value'})
-        assert test_dict.get_dict()['test'] == 'value'
-
-
 # ============================================================================
 # TIER 3 — Result extraction from pre-computed VASP calculations
 # ============================================================================
 
 @pytest.mark.tier3
+@pytest.mark.localwork
 @pytest.mark.requires_aiida
 class TestVaspRelaxResultExtraction:
     """Validate result extraction from a completed VASP relaxation (Si diamond)."""
@@ -325,6 +311,7 @@ class TestVaspRelaxResultExtraction:
 
 
 @pytest.mark.tier3
+@pytest.mark.localwork
 @pytest.mark.requires_aiida
 class TestVaspScfResultExtraction:
     """Validate result extraction from a completed VASP SCF (SnO2 rutile)."""

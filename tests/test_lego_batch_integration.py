@@ -28,8 +28,7 @@ from aiida import orm  # noqa: E402
 # TIER 2 — Validation tests (no VASP needed)
 # ============================================================================
 
-@pytest.mark.tier2
-@pytest.mark.requires_aiida
+@pytest.mark.tier1
 class TestBatchValidation:
     """Test batch brick validation logic."""
 
@@ -92,9 +91,8 @@ class TestBatchValidation:
             validate_stage(stage, {'relax'})
 
 
-@pytest.mark.tier2
-@pytest.mark.requires_aiida
-class TestBatchImportAndBasic:
+@pytest.mark.tier1
+class TestBatchImport:
     """Test that batch brick can be imported and basic functionality works."""
 
     def test_batch_brick_importable(self):
@@ -128,6 +126,12 @@ class TestBatchImportAndBasic:
         assert merged['incar']['encut'] == 400
         assert merged['incar']['ismear'] == 0
 
+
+@pytest.mark.tier2
+@pytest.mark.requires_aiida
+class TestBatchStructureFixtures:
+    """Test that AiiDA structure fixtures are available for batch tests."""
+
     def test_create_structure_fixtures(self, si_diamond_structure):
         """Test that structure fixtures work for batch calculations."""
         assert si_diamond_structure is not None
@@ -139,6 +143,7 @@ class TestBatchImportAndBasic:
 # ============================================================================
 
 @pytest.mark.tier3
+@pytest.mark.localwork
 @pytest.mark.requires_aiida
 class TestBatchResultExtraction:
     """Validate result extraction from a completed batch calculation (Si ENCUT scan)."""

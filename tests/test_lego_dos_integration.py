@@ -29,8 +29,7 @@ from aiida_workgraph import WorkGraph, task  # noqa: E402
 # TIER 2 — WorkGraph construction tests (no VASP needed)
 # ============================================================================
 
-@pytest.mark.tier2
-@pytest.mark.requires_aiida
+@pytest.mark.tier1
 class TestDosValidation:
     """Test DOS brick validation logic."""
 
@@ -106,9 +105,8 @@ class TestDosValidation:
             validate_stage(stage, {'relax'})
 
 
-@pytest.mark.tier2
-@pytest.mark.requires_aiida
-class TestDosImportAndBasic:
+@pytest.mark.tier1
+class TestDosImport:
     """Test that DOS brick can be imported and basic structures work."""
 
     def test_dos_brick_importable(self):
@@ -129,6 +127,12 @@ class TestDosImportAndBasic:
         assert 'outputs' in PORTS
         assert 'structure' in PORTS['inputs']
 
+
+@pytest.mark.tier2
+@pytest.mark.requires_aiida
+class TestDosStructureFixtures:
+    """Test that AiiDA structure fixtures are available for DOS tests."""
+
     def test_create_structure_fixtures(self, si_diamond_structure, sno2_rutile_structure):
         """Test structure fixtures are available."""
         assert si_diamond_structure is not None
@@ -142,6 +146,7 @@ class TestDosImportAndBasic:
 # ============================================================================
 
 @pytest.mark.tier3
+@pytest.mark.localwork
 @pytest.mark.requires_aiida
 class TestDosResultExtraction:
     """Validate result extraction from a completed DOS calculation (SnO2)."""

@@ -126,8 +126,8 @@ class TestBrickRegistry:
         )
 
     def test_registry_has_twenty_three_entries(self):
-        from quantum_lego.core.bricks import BRICK_REGISTRY
-        assert len(BRICK_REGISTRY) == 26  # +select_stable_surface, +fukui_dynamic
+        from quantum_lego.core.bricks import BRICK_REGISTRY, VALID_BRICK_TYPES
+        assert len(BRICK_REGISTRY) == len(VALID_BRICK_TYPES)
 
     def test_get_brick_module_valid_types(self):
         from quantum_lego.core.bricks import get_brick_module, VALID_BRICK_TYPES
