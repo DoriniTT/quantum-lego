@@ -81,7 +81,9 @@ def pick_structure_by_label(label: orm.Str, **structures) -> orm.StructureData:
         raise TypeError(
             f"Expected StructureData for label '{key}', got {type(struct)}"
         )
-    return struct
+    # Clone to create a new node: calcfunctions cannot return an already-stored
+    # node (it would violate the "one incoming CREATE link" AiiDA constraint).
+    return struct.clone()
 
 
 @task.graph
