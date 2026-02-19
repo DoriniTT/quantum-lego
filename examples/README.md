@@ -24,6 +24,7 @@ This directory is organized as a numbered learning path from simple to advanced 
 | 10 | `utilities` | Output formatting, result extraction, error handling |
 | 11 | `neb` | Nudged Elastic Band (NEB) and CI-NEB pathways |
 | 12 | `dimer` | Improved Dimer Method (IDM) for transition-state refinement |
+| 13 | `full_characterisation` | Complete six-phase SnO2 characterisation: EOS → Hubbard U → HSE06 → surface thermodynamics → Fukui indices |
 
 ## Progression
 
@@ -39,6 +40,7 @@ This directory is organized as a numbered learning path from simple to advanced 
 10. `10_utilities`
 11. `11_neb` — nudged elastic band (NEB/CI-NEB pathways)
 12. `12_dimer` — Improved Dimer Method (IDM) for transition-state refinement: vibrational analysis → IDM TS search (IBRION=44) → TS verification
+13. `13_full_characterisation` — Complete six-phase SnO2 characterisation combining every brick type (EOS, Hubbard U, HSE06, surface thermo, Fukui f±)
 
 ## Quick Start
 
@@ -46,6 +48,7 @@ This directory is organized as a numbered learning path from simple to advanced 
 python examples/01_getting_started/single_vasp.py
 python examples/04_sequential/mixed_dos_sources.py
 python examples/09_other_codes/qe_single_and_pipeline.py
+python examples/13_full_characterisation/sno2_full_characterisation.py   # full pipeline
 ```
 
 ## Notes

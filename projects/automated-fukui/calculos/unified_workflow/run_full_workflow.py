@@ -579,7 +579,7 @@ stages = [
 # Stage counter offset (stages 1–15 defined above)
 _stage_n = 15
 
-miller_list = [(1, 1, 0)]  # Hard coded to 110 only for now to simplify.
+miller_list = [(1, 1, 0), (1, 0, 0)]  # Hard coded to 110 and 100 only for now to simplify.
 for hkl in miller_list:
     s = hkl_str(hkl)  # e.g. '110'
     _stage_n += 7

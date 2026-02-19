@@ -32,6 +32,11 @@ tools:
   - cat pyproject.toml
   - cat .github/workflows/tests-review.md
   - gh aw compile tests-review
+  - for f in tests/test_*.py; do echo "$(basename $f):$(grep -c '    def test_\|^def test_' $f 2>/dev/null || echo 0)"; done
+  - grep -c "@pytest.mark.tier1" tests/test_*.py
+  - grep -c "@pytest.mark.tier2" tests/test_*.py
+  - grep -c "@pytest.mark.tier3" tests/test_*.py
+  - grep "BRICK_REGISTRY" quantum_lego/core/bricks/__init__.py -A 60
   edit:
   github:
     toolsets:
@@ -79,7 +84,20 @@ find tests/ -name "*.py" -type f | sort
 find tests/ -name "*.json" -type f | sort
 ```
 
-### 1.2 Read pytest configuration
+### 1.2 Count tests per file and per tier
+
+```bash
+for f in tests/test_*.py; do echo "$(basename $f):$(grep -c '    def test_\|^def test_' $f 2>/dev/null || echo 0)"; done
+grep -c "@pytest.mark.tier1" tests/test_*.py
+grep -c "@pytest.mark.tier2" tests/test_*.py
+grep -c "@pytest.mark.tier3" tests/test_*.py
+```
+
+Record the exact counts. These are the ground-truth numbers to use in the issue Stats section. Do not rely on approximate counts from the prompt.
+
+> **Note on bash tools**: If a command with `xargs` or complex piping returns "Permission denied", use simple `for`-loops or direct file reads instead. The allowed tools list above has pre-vetted alternatives for common operations.
+
+### 1.3 Read pytest configuration
 
 ```bash
 cat tests/conftest.py
@@ -90,7 +108,7 @@ From `conftest.py` note: registered markers (`tier1`, `tier2`, `tier3`, `require
 
 From `pyproject.toml` note: `[tool.pytest.ini_options]` settings, declared dependencies, and Python version requirements.
 
-### 1.3 Read reference PKs for Tier 3
+### 1.4 Read reference PKs for Tier 3
 
 ```bash
 cat tests/fixtures/lego_reference_pks.json
@@ -102,24 +120,27 @@ Note all scenario keys and which brick types they cover.
 
 ## Phase 2: Read Source Context
 
-Use Serena's `activate_project` tool with the workspace path (`${{ github.workspace }}`), then read:
+Read these files directly:
 
 - **`quantum_lego/core/__init__.py`** — the complete public API (all exported names, functions, classes)
 - **`quantum_lego/core/bricks/__init__.py`** — the brick registry and resolver functions
 
-Then list all brick files:
+> **Serena note**: If Serena's `activate_project` tool is available and succeeds, you may use it for richer semantic search. If it fails with a permission or activation error, fall back to direct file reading (view/grep tools) — this works equally well for the analysis.
+
+Then verify the exact brick count and list all brick files:
 
 ```bash
+grep "BRICK_REGISTRY" quantum_lego/core/bricks/__init__.py -A 60
 find quantum_lego/core/bricks/ -name "*.py" -type f | sort
 ```
 
-Build a master list of all brick module names (e.g., `relax`, `static`, `dos`, `batch`, `aimd`, `neb`, `bader`, etc.). You will use this list throughout the review to check coverage.
+From the `BRICK_REGISTRY` grep output, count the registered brick keys and record the exact number. Build a master list of all brick type names (e.g., `vasp`, `dos`, `batch`, `aimd`, `neb`, `bader`, `convergence`, `thickness`, `hubbard_response`, `hubbard_analysis`, `qe`, `cp2k`, `generate_neb_images`, `neb`, `birch_murnaghan`, `birch_murnaghan_refine`, `fukui_analysis`, etc.). You will use this list throughout the review to check coverage.
 
 ---
 
 ## Phase 3: Tier 1 Test Review
 
-Read every Tier 1 test file with Serena. The Tier 1 files cover:
+Read every Tier 1 test file (directly or via Serena if available). The Tier 1 files cover:
 
 - `test_lego_connections.py` — PORT/connection validation system
 - `test_lego_bricks.py` — brick registry and `validate_stage()`
@@ -154,7 +175,7 @@ For each brick in the master list, check whether its pure-Python logic is tested
 
 ## Phase 4: Tier 2 Test Review
 
-Read every Tier 2 test file with Serena:
+Read every Tier 2 test file (directly or via Serena if available):
 
 - `test_lego_vasp_integration.py` — VASP brick WorkGraph construction
 - `test_lego_dos_integration.py` — DOS brick WorkGraph construction
@@ -186,12 +207,20 @@ For each brick in the master list, check:
 
 ## Phase 5: Tier 3 Test Review
 
-Read every Tier 3 test file with Serena:
+### 5.0 Read reference PKs first
+
+Re-read (or recall from Phase 1.4) `tests/fixtures/lego_reference_pks.json`. List all scenario keys and note which brick types each covers. This gives you the expected PK landscape before reading the test files.
+
+### 5.1 Read Tier 3 test files
+
+Read every Tier 3 test file:
 
 - `test_aimd_velocity_injection.py` — velocity injection with real VASP AIMD outputs
 - `test_aimd_lvel_fix.py` — LVEL file handling regression
 
-Also cross-check `tests/fixtures/lego_reference_pks.json`:
+> **Manual scenario note**: Some tier3 tests are permanently skipped with inline "manual scenario" comments (e.g., `pytest.skip("manual scenario")`). These are **legitimate tier3 tests** that document expected behavior against specific pre-computed PKs — count them in the tier3 total but flag them separately as "requires manual PK setup". Do not exclude them from the coverage matrix.
+
+Cross-check the test files against `tests/fixtures/lego_reference_pks.json`:
 
 ### Tier 3 Quality Checklist
 
@@ -211,15 +240,26 @@ Compare the scenario keys in `lego_reference_pks.json` against the master brick 
 
 ## Phase 6: Cross-Tier Coverage Matrix
 
-Build a table covering every brick in the master list against all three tiers:
+Build a table covering every brick in the master list against all three tiers. Use the pre-filled template below — update each cell based on your findings. Add rows for any bricks you discovered in Phase 2 that are not listed here.
 
 | Brick | Tier 1 | Tier 2 | Tier 3 | Notes |
 |---|---|---|---|---|
-| `relax` | ✅ | ✅ | ✅ | Full coverage |
-| `static` | ✅ | ✅ | ✅ | |
-| `dos` | ⚠️ | ✅ | ✅ | Missing edge-case tier1 |
-| `neb` | ❌ | ❌ | ❌ | No tests at any tier |
-| ... | | | | |
+| `vasp` | | | | |
+| `dos` | | | | |
+| `batch` | | | | |
+| `bader` | | | | |
+| `convergence` | | | | |
+| `thickness` | | | | |
+| `hubbard_response` | | | | |
+| `hubbard_analysis` | | | | |
+| `aimd` | | | | |
+| `qe` | | | | |
+| `cp2k` | | | | |
+| `generate_neb_images` | | | | |
+| `neb` | | | | |
+| `birch_murnaghan` | | | | |
+| `birch_murnaghan_refine` | | | | |
+| `fukui_analysis` | | | | |
 
 Legend: ✅ covered · ⚠️ partial · ❌ missing
 
@@ -269,9 +309,10 @@ Follow the `shared/reporting.md` formatting guidelines.
 [2-3 sentence summary of overall test suite health across all three tiers]
 
 **Stats**:
-- Tier 1 tests reviewed: ~420 (N test files)
-- Tier 2 tests reviewed: ~48 (N test files)
-- Tier 3 tests reviewed: ~30 (N test files)
+- Tier 1 tests reviewed: N (N test files) <!-- use exact counts from Phase 1.2 -->
+- Tier 2 tests reviewed: N (N test files)
+- Tier 3 tests reviewed: N (N test files, N with manual scenario skips)
+- Total bricks in BRICK_REGISTRY: N <!-- use exact count from Phase 2 -->
 - Bricks with zero coverage: N
 - Bricks missing Tier 2: N
 - Bricks missing Tier 3: N
