@@ -5,7 +5,7 @@ Moved from `examples/aimd/test_velocity_injection.py`.
 
 import pytest
 
-pytestmark = [pytest.mark.requires_aiida, pytest.mark.tier3]
+pytestmark = [pytest.mark.requires_aiida, pytest.mark.tier3, pytest.mark.localwork]
 
 
 def test_velocity_injection_manual_integration():

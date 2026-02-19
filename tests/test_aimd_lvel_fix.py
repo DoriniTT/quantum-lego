@@ -6,7 +6,7 @@ workflows and tests under `tests/`.
 
 import pytest
 
-pytestmark = [pytest.mark.requires_aiida, pytest.mark.tier3]
+pytestmark = [pytest.mark.requires_aiida, pytest.mark.tier3, pytest.mark.localwork]
 
 
 def test_lvel_fix_manual_integration():
