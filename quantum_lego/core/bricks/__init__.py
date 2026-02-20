@@ -39,6 +39,7 @@ from . import (
     surface_gibbs_energy,
     select_stable_surface,
     fukui_dynamic,
+    adsorption,
 )
 from .connections import (  # noqa: F401
     PORT_TYPES,
@@ -77,6 +78,7 @@ BRICK_REGISTRY = {
     'surface_gibbs_energy': surface_gibbs_energy,
     'select_stable_surface': select_stable_surface,
     'fukui_dynamic': fukui_dynamic,
+    'adsorption': adsorption,
 }
 
 VALID_BRICK_TYPES = tuple(BRICK_REGISTRY.keys())

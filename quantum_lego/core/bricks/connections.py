@@ -47,6 +47,7 @@ PORT_TYPES = {
     'band_structure',
     'surface_families',
     'formation_enthalpy',
+    'adsorption_energy',
 }
 
 
@@ -928,6 +929,52 @@ HYBRID_BANDS_PORTS = {
     },
 }
 
+ADSORPTION_PORTS = {
+    'inputs': {
+        'structure': {
+            'type': 'structure',
+            'required': True,
+            'source': 'structure_from',
+            'description': 'Complete relaxed system (substrate + adsorbate)',
+        },
+        'adsorbate_formula': {
+            'type': 'structure',  # closest available type for a formula string
+            'required': True,
+            'description': 'Chemical formula of the adsorbate (e.g. H2O)',
+        },
+    },
+    'outputs': {
+        'adsorption_energy': {
+            'type': 'adsorption_energy',
+            'description': 'E_ads = E_complete - E_substrate - E_molecule (eV)',
+        },
+        'complete_energy': {
+            'type': 'energy',
+            'description': 'Total energy of the complete system (eV)',
+        },
+        'substrate_energy': {
+            'type': 'energy',
+            'description': 'Total energy of the isolated substrate (eV)',
+        },
+        'molecule_energy': {
+            'type': 'energy',
+            'description': 'Total energy of the isolated molecule (eV)',
+        },
+        'complete_misc': {
+            'type': 'misc',
+            'description': 'VASP misc output for the complete system',
+        },
+        'substrate_misc': {
+            'type': 'misc',
+            'description': 'VASP misc output for the substrate',
+        },
+        'molecule_misc': {
+            'type': 'misc',
+            'description': 'VASP misc output for the molecule',
+        },
+    },
+}
+
 # Registry mapping brick type name -> PORTS dict
 ALL_PORTS = {
     'vasp': VASP_PORTS,
@@ -956,6 +1003,7 @@ ALL_PORTS = {
     'surface_gibbs_energy': SURFACE_GIBBS_ENERGY_PORTS,
     'select_stable_surface': SELECT_STABLE_SURFACE_PORTS,
     'fukui_dynamic': FUKUI_DYNAMIC_PORTS,
+    'adsorption': ADSORPTION_PORTS,
 }
 
 
@@ -1178,7 +1226,10 @@ def validate_connections(stages: list) -> list:
 
         # Check every required input can be satisfied
         for input_name, input_port in ports['inputs'].items():
-            source_key = input_port['source']
+            source_key = input_port.get('source')
+            if source_key is None:
+                # Static input (no cross-stage reference); validated by validate_stage.
+                continue
 
             # Explicit per-stage structure overrides connection-based structure sourcing.
             # Used by DOS/VASP stages that provide a direct StructureData/PK.

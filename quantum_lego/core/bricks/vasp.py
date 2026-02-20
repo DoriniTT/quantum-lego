@@ -104,6 +104,20 @@ def validate_stage(stage: Dict[str, Any], stage_names: Set[str]) -> None:
                     f"got: {spec}"
                 )
 
+    # Convenience alias: fix_bottom=<Å> → fix_type='bottom', fix_thickness=<Å>
+    fix_bottom = stage.get('fix_bottom', None)
+    if fix_bottom is not None:
+        if 'fix_type' in stage or 'fix_thickness' in stage:
+            raise ValueError(
+                f"Stage '{name}': cannot combine 'fix_bottom' with "
+                f"'fix_type'/'fix_thickness'. Use one or the other."
+            )
+        if not isinstance(fix_bottom, (int, float)) or fix_bottom <= 0:
+            raise ValueError(
+                f"Stage '{name}': fix_bottom must be a positive number (Å), "
+                f"got {fix_bottom!r}"
+            )
+
     # Validate fix_type
     fix_type = stage.get('fix_type', None)
     if fix_type is not None:
@@ -239,9 +253,14 @@ def create_stage_tasks(
     stage_kpoints_mesh = stage.get('kpoints', None)
     stage_retrieve = stage.get('retrieve', None)
 
-    # Get fix parameters for this stage
-    stage_fix_type = stage.get('fix_type', None)
-    stage_fix_thickness = stage.get('fix_thickness', 0.0)
+    # Get fix parameters for this stage (fix_bottom is a convenience alias)
+    _fix_bottom = stage.get('fix_bottom', None)
+    if _fix_bottom is not None:
+        stage_fix_type      = 'bottom'
+        stage_fix_thickness = float(_fix_bottom)
+    else:
+        stage_fix_type      = stage.get('fix_type', None)
+        stage_fix_thickness = stage.get('fix_thickness', 0.0)
     stage_fix_elements = stage.get('fix_elements', None)
 
     # Determine if we can compute dynamics at build time
