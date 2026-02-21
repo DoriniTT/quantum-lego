@@ -27,13 +27,11 @@ from ..types import StageContext, StageTasksResult
 def _find_adsorbate_indices(pmg_struct, adsorbate_formula_str: str) -> set:
     """Find atom indices belonging to the adsorbate molecule.
 
-    Tries CrystalNN connectivity first.  Falls back to a 1.8 Å distance
-    cutoff (covalent bonds only) when CrystalNN either fails or produces a
-    single fully-connected component (e.g. when it detects the surface–
-    molecule adsorption bond and merges them).
+    Uses a simple 1.8 Å distance-cutoff graph to find a connected component
+    matching the requested chemical formula.
 
     Args:
-        pmg_struct: pymatgen Structure (complete adsorbed system).
+        pmg_struct: ASE Atoms (complete adsorbed system).
         adsorbate_formula_str: Chemical formula of the adsorbate (e.g. 'H2O').
 
     Returns:
@@ -42,13 +40,11 @@ def _find_adsorbate_indices(pmg_struct, adsorbate_formula_str: str) -> set:
     Raises:
         ValueError: If no component matching the formula can be found.
     """
-    from pymatgen.core import Composition
-    from pymatgen.analysis.graphs import StructureGraph
-    from pymatgen.analysis.local_env import CrystalNN
     import networkx as nx
+    from ase.formula import Formula
 
-    adsorbate_comp = Composition(adsorbate_formula_str)
-    n_adsorbate = int(round(sum(adsorbate_comp.values())))
+    adsorbate_comp = Formula(adsorbate_formula_str).count()
+    n_adsorbate = int(sum(adsorbate_comp.values()))
 
     def find_matching_component(components):
         for comp_indices in components:
@@ -57,31 +53,19 @@ def _find_adsorbate_indices(pmg_struct, adsorbate_formula_str: str) -> set:
                 continue
             local_comp: dict = {}
             for i in comp_indices:
-                sym = pmg_struct[i].species_string
+                sym = pmg_struct[i].symbol
                 local_comp[sym] = local_comp.get(sym, 0) + 1
-            if Composition(local_comp) == adsorbate_comp:
+            if local_comp == adsorbate_comp:
                 return set(comp_indices)
         return None
 
-    # Primary: CrystalNN-based StructureGraph
-    try:
-        nn = CrystalNN()
-        sg = StructureGraph.with_local_env_strategy(pmg_struct, nn)
-        graph = sg.graph.to_undirected()
-        components = list(nx.connected_components(graph))
-        result = find_matching_component(components)
-        if result is not None:
-            return result
-    except Exception:
-        pass
-
-    # Fallback: distance cutoff 1.8 Å (covalent bonds only)
+    # Distance cutoff 1.8 Å (covalent bonds only)
     n = len(pmg_struct)
     graph = nx.Graph()
     graph.add_nodes_from(range(n))
     for i in range(n):
         for j in range(i + 1, n):
-            if pmg_struct.get_distance(i, j) < 1.8:
+            if pmg_struct.get_distance(i, j, mic=True) < 1.8:
                 graph.add_edge(i, j)
     components = list(nx.connected_components(graph))
     result = find_matching_component(components)
@@ -103,8 +87,8 @@ def _find_adsorbate_indices(pmg_struct, adsorbate_formula_str: str) -> set:
 def separate_adsorbate_structure(structure, adsorbate_formula):
     """Split a slab+adsorbate StructureData into three parts.
 
-    Uses CrystalNN connectivity (with 1.8 Å distance fallback) to identify
-    atoms belonging to the adsorbate.
+    Uses a simple 1.8 Å distance-cutoff connectivity graph to identify atoms
+    belonging to the adsorbate.
 
     Args:
         structure: AiiDA StructureData — complete adsorbed system.
@@ -114,35 +98,24 @@ def separate_adsorbate_structure(structure, adsorbate_formula):
         Dict with keys ``substrate``, ``molecule``, ``complete``
         (each an AiiDA StructureData).
     """
-    from pymatgen.core import Structure as PmgStructure
     from aiida.orm import StructureData
 
     formula_str = adsorbate_formula.value
-    pmg_struct = structure.get_pymatgen()
+    ase_struct = structure.get_ase()
 
-    adsorbate_indices = _find_adsorbate_indices(pmg_struct, formula_str)
+    adsorbate_indices = _find_adsorbate_indices(ase_struct, formula_str)
 
-    all_indices = set(range(len(pmg_struct)))
+    all_indices = set(range(len(ase_struct)))
     substrate_indices = sorted(all_indices - adsorbate_indices)
     molecule_indices = sorted(adsorbate_indices)
 
-    lattice = pmg_struct.lattice
-
-    substrate_pmg = PmgStructure(
-        lattice,
-        [pmg_struct[i].species_string for i in substrate_indices],
-        [pmg_struct[i].frac_coords for i in substrate_indices],
-    )
-    molecule_pmg = PmgStructure(
-        lattice,
-        [pmg_struct[i].species_string for i in molecule_indices],
-        [pmg_struct[i].frac_coords for i in molecule_indices],
-    )
+    substrate_ase = ase_struct[substrate_indices]
+    molecule_ase = ase_struct[molecule_indices]
 
     return {
-        'substrate': StructureData(pymatgen=substrate_pmg),
-        'molecule': StructureData(pymatgen=molecule_pmg),
-        'complete': StructureData(pymatgen=pmg_struct),
+        'substrate': StructureData(ase=substrate_ase),
+        'molecule': StructureData(ase=molecule_ase),
+        'complete': StructureData(ase=ase_struct),
     }
 
 
