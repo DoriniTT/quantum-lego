@@ -49,31 +49,35 @@ def validate_stage(stage: Dict[str, Any], stage_names: Set[str]) -> None:
         )
 
     volumes = stage.get('volumes')
-    if not isinstance(volumes, dict):
-        raise ValueError(
-            f"Stage '{name}': birch_murnaghan stages require 'volumes' dict "
-            f"mapping calc_label to volume in Angstrom^3"
-        )
-    if len(volumes) < 4:
-        raise ValueError(
-            f"Stage '{name}': volumes must have at least 4 entries "
-            f"(got {len(volumes)})"
-        )
-    for label, vol in volumes.items():
-        if not isinstance(label, str):
+    if volumes is not None:
+        # Static volumes dict provided — validate it
+        if not isinstance(volumes, dict):
             raise ValueError(
-                f"Stage '{name}': volumes keys must be strings "
-                f"(got {type(label)})"
+                f"Stage '{name}': 'volumes' must be a dict mapping calc_label "
+                f"to volume in Angstrom^3"
             )
-        if not isinstance(vol, (int, float)):
+        if len(volumes) < 4:
             raise ValueError(
-                f"Stage '{name}': volumes['{label}'] must be numeric"
+                f"Stage '{name}': volumes must have at least 4 entries "
+                f"(got {len(volumes)})"
             )
-        if float(vol) <= 0.0:
-            raise ValueError(
-                f"Stage '{name}': volumes['{label}'] must be positive "
-                f"(got {vol})"
-            )
+        for label, vol in volumes.items():
+            if not isinstance(label, str):
+                raise ValueError(
+                    f"Stage '{name}': volumes keys must be strings "
+                    f"(got {type(label)})"
+                )
+            if not isinstance(vol, (int, float)):
+                raise ValueError(
+                    f"Stage '{name}': volumes['{label}'] must be numeric"
+                )
+            if float(vol) <= 0.0:
+                raise ValueError(
+                    f"Stage '{name}': volumes['{label}'] must be positive "
+                    f"(got {vol})"
+                )
+    # When 'volumes' is absent, volumes are read at build time from the batch
+    # stage's scale_tasks (set when the batch stage uses 'strains').
 
 
 def create_stage_tasks(wg, stage, stage_name, context):
@@ -111,33 +115,70 @@ def create_stage_tasks(wg, stage, stage_name, context):
             f"does not have batch energy_tasks"
         )
 
-    volumes = stage['volumes']
+    volumes = stage.get('volumes')
+    scale_tasks = batch_result.get('scale_tasks', {})
 
-    # Validate labels match batch calculations
-    missing_labels = [label for label in volumes if label not in energy_tasks]
-    if missing_labels:
-        raise ValueError(
-            f"Birch-Murnaghan stage '{stage_name}': labels {missing_labels} "
-            f"not found in batch stage '{batch_from}' calculations"
+    if scale_tasks:
+        # ----------------------------------------------------------------
+        # Dynamic path: volumes come from scale_structure_by_strain sockets.
+        # Uses gather_eos_data_dynamic which accepts per-label vol/energy kwargs.
+        # ----------------------------------------------------------------
+        from quantum_lego.core.common.eos_tasks import gather_eos_data_dynamic
+
+        sorted_labels = sorted(scale_tasks.keys())
+        missing_labels = [l for l in sorted_labels if l not in energy_tasks]
+        if missing_labels:
+            raise ValueError(
+                f"Birch-Murnaghan stage '{stage_name}': labels {missing_labels} "
+                f"not found in batch stage '{batch_from}' energy_tasks"
+            )
+
+        gather_kwargs = {}
+        for label in sorted_labels:
+            gather_kwargs[f'energy_{label}'] = energy_tasks[label].outputs.result
+            gather_kwargs[f'vol_{label}'] = scale_tasks[label].outputs.volume
+
+        gather_task = wg.add_task(
+            gather_eos_data_dynamic,
+            name=f'gather_eos_{stage_name}',
+            labels=orm.List(list=sorted_labels),
+            **gather_kwargs,
         )
 
-    # Sort by label for deterministic ordering
-    sorted_labels = sorted(volumes.keys())
-    sorted_volumes = [float(volumes[label]) for label in sorted_labels]
+    else:
+        # ----------------------------------------------------------------
+        # Static path: volumes provided as a dict in the stage config.
+        # ----------------------------------------------------------------
+        if volumes is None:
+            raise ValueError(
+                f"Birch-Murnaghan stage '{stage_name}': 'volumes' dict is required "
+                f"when the batch stage '{batch_from}' does not use 'strains'."
+            )
 
-    # Build energy kwargs for gather task
-    energy_kwargs = {}
-    for label in sorted_labels:
-        energy_kwargs[label] = energy_tasks[label].outputs.result
+        # Validate labels match batch calculations
+        missing_labels = [label for label in volumes if label not in energy_tasks]
+        if missing_labels:
+            raise ValueError(
+                f"Birch-Murnaghan stage '{stage_name}': labels {missing_labels} "
+                f"not found in batch stage '{batch_from}' calculations"
+            )
 
-    # Create gather task
-    gather_task = wg.add_task(
-        gather_eos_data,
-        name=f'gather_eos_{stage_name}',
-        volumes=orm.List(list=sorted_volumes),
-        labels=orm.List(list=sorted_labels),
-        **energy_kwargs,
-    )
+        # Sort by label for deterministic ordering
+        sorted_labels = sorted(volumes.keys())
+        sorted_volumes = [float(volumes[label]) for label in sorted_labels]
+
+        # Build energy kwargs for gather task
+        energy_kwargs = {}
+        for label in sorted_labels:
+            energy_kwargs[label] = energy_tasks[label].outputs.result
+
+        gather_task = wg.add_task(
+            gather_eos_data,
+            name=f'gather_eos_{stage_name}',
+            volumes=orm.List(list=sorted_volumes),
+            labels=orm.List(list=sorted_labels),
+            **energy_kwargs,
+        )
 
     # Create fit task
     fit_task = wg.add_task(

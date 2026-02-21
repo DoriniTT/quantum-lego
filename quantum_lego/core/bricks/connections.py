@@ -301,6 +301,24 @@ FUKUI_DYNAMIC_PORTS = {
     },
 }
 
+DISPLACE_ATOM_PORTS = {
+    'inputs': {
+        'batch_structures': {
+            'type': 'energy',  # proxy: validates batch connection; actual structure access is internal
+            'required': True,
+            'source': 'batch_from',
+            'compatible_bricks': ['batch'],
+            'description': 'Batch stage whose calc structures will be displaced',
+        },
+    },
+    'outputs': {
+        'structure': {
+            'type': 'structure',
+            'description': 'Structure with the atom pair displaced in opposite directions',
+        },
+    },
+}
+
 BIRCH_MURNAGHAN_PORTS = {
     'inputs': {
         'batch_energies': {
@@ -983,6 +1001,7 @@ ALL_PORTS = {
     'hybrid_bands': HYBRID_BANDS_PORTS,
     'batch': BATCH_PORTS,
     'fukui_analysis': FUKUI_ANALYSIS_PORTS,
+    'displace_atom': DISPLACE_ATOM_PORTS,
     'birch_murnaghan': BIRCH_MURNAGHAN_PORTS,
     'birch_murnaghan_refine': BIRCH_MURNAGHAN_REFINE_PORTS,
     'bader': BADER_PORTS,

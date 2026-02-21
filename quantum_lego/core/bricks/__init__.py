@@ -18,6 +18,7 @@ from . import (
     dos,
     hybrid_bands,
     batch,
+    displace_atom,
     fukui_analysis,
     birch_murnaghan,
     birch_murnaghan_refine,
@@ -57,6 +58,7 @@ BRICK_REGISTRY = {
     'dos': dos,
     'hybrid_bands': hybrid_bands,
     'batch': batch,
+    'displace_atom': displace_atom,
     'fukui_analysis': fukui_analysis,
     'birch_murnaghan': birch_murnaghan,
     'birch_murnaghan_refine': birch_murnaghan_refine,
@@ -159,6 +161,8 @@ def resolve_structure_from(structure_from: str, context: dict):
     elif ref_stage_type == 'o2_reference_energy':
         # o2_reference_energy exposes a dummy O2 StructureData via a calcfunction
         return stage_tasks[structure_from]['structure'].outputs.result
+    elif ref_stage_type == 'displace_atom':
+        return stage_tasks[structure_from]['displace'].outputs.result
     elif ref_stage_type in ('birch_murnaghan', 'birch_murnaghan_refine'):
         # Both BM bricks expose their volume-optimised structure via the
         # 'recommend' task (build_recommended_structure calcfunction).

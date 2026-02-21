@@ -31,9 +31,13 @@ def validate_stage(stage: Dict[str, Any], stage_names: Set[str]) -> None:
         raise ValueError(f"Stage '{name}': batch stages require 'structure_from'")
     if 'base_incar' not in stage:
         raise ValueError(f"Stage '{name}': batch stages require 'base_incar'")
-    if 'calculations' not in stage or not stage['calculations']:
+
+    has_strains = 'strains' in stage and stage['strains']
+    has_calcs = 'calculations' in stage and stage['calculations']
+    if not has_strains and not has_calcs:
         raise ValueError(
-            f"Stage '{name}': batch stages require non-empty 'calculations' dict"
+            f"Stage '{name}': batch stages require either 'strains' (list of "
+            f"linear strains) or a non-empty 'calculations' dict"
         )
 
     structure_from = stage['structure_from']
@@ -64,7 +68,11 @@ def create_stage_tasks(
     from . import resolve_structure_from
     from ..workgraph import _prepare_builder_inputs
 
-    code = context['code']
+    # Allow per-stage code override via 'code_label' key
+    if 'code_label' in stage:
+        code = orm.load_code(stage['code_label'])
+    else:
+        code = context['code']
     potential_family = context['potential_family']
     potential_mapping = context['potential_mapping']
     options = context['options']
@@ -82,7 +90,6 @@ def create_stage_tasks(
     VaspTask = task(VaspWorkChain)
 
     base_incar = stage['base_incar']
-    calculations = stage['calculations']
 
     # Stage-level defaults
     stage_kpoints_spacing = stage.get('kpoints_spacing', base_kpoints_spacing)
@@ -91,67 +98,126 @@ def create_stage_tasks(
 
     calc_tasks = {}
     energy_tasks = {}
+    scale_tasks = {}
 
-    for calc_label, calc_config in calculations.items():
-        # Per-calc structure override or stage-level
-        calc_structure = input_structure
-        if 'structure' in calc_config:
-            explicit = calc_config['structure']
-            calc_structure = orm.load_node(explicit) if isinstance(explicit, int) else explicit
+    strains = stage.get('strains')
+    if strains is not None:
+        # ----------------------------------------------------------------
+        # Strains path: create scale_structure_by_strain tasks wired to
+        # input_structure socket, then VASP tasks on the scaled structures.
+        # This creates proper WorkGraph dependencies to the previous stage.
+        # ----------------------------------------------------------------
+        from ..common.eos_tasks import scale_structure_by_strain
 
-        # Deep-merge base_incar with per-calculation incar overrides
-        calc_incar_overrides = calc_config.get('incar', {})
-        if calc_incar_overrides:
-            merged_incar = deep_merge_dicts(base_incar, calc_incar_overrides)
-        else:
-            merged_incar = dict(base_incar)
-
-        # Per-calc kpoints or fall back to stage-level
-        calc_kpoints_mesh = calc_config.get('kpoints', stage_kpoints_mesh)
-        calc_kpoints_spacing = calc_config.get('kpoints_spacing', stage_kpoints_spacing)
-
-        # Per-calc retrieve or fall back to stage-level
-        calc_retrieve = calc_config.get('retrieve', stage_retrieve)
-
-        # Prepare builder inputs
         builder_inputs = _prepare_builder_inputs(
-            incar=merged_incar,
-            kpoints_spacing=calc_kpoints_spacing,
+            incar=dict(base_incar),
+            kpoints_spacing=stage_kpoints_spacing,
             potential_family=potential_family,
             potential_mapping=potential_mapping,
             options=options,
-            retrieve=calc_retrieve,
+            retrieve=stage_retrieve,
             restart_folder=None,
             clean_workdir=clean_workdir,
-            kpoints_mesh=calc_kpoints_mesh,
+            kpoints_mesh=stage_kpoints_mesh,
         )
 
-        # Add VASP task
-        vasp_task_name = f'vasp_{stage_name}_{calc_label}'
-        vasp_task = wg.add_task(
-            VaspTask,
-            name=vasp_task_name,
-            structure=calc_structure,
-            code=code,
-            **builder_inputs
-        )
+        for strain_val in strains:
+            sign = 'm' if strain_val < 0 else 'p'
+            label = f'v_{sign}{abs(strain_val * 100):03.0f}'
 
-        # Add energy extraction task
-        energy_task_name = f'energy_{stage_name}_{calc_label}'
-        energy_task = wg.add_task(
-            extract_total_energy,
-            name=energy_task_name,
-            energies=vasp_task.outputs.misc,
-            retrieved=vasp_task.outputs.retrieved,
-        )
+            scale_task = wg.add_task(
+                scale_structure_by_strain,
+                name=f'scale_{stage_name}_{label}',
+                structure=input_structure,
+                strain=orm.Float(strain_val),
+            )
 
-        calc_tasks[calc_label] = vasp_task
-        energy_tasks[calc_label] = energy_task
+            vasp_task = wg.add_task(
+                VaspTask,
+                name=f'vasp_{stage_name}_{label}',
+                structure=scale_task.outputs.structure,
+                code=code,
+                **builder_inputs,
+            )
+
+            energy_task = wg.add_task(
+                extract_total_energy,
+                name=f'energy_{stage_name}_{label}',
+                energies=vasp_task.outputs.misc,
+                retrieved=vasp_task.outputs.retrieved,
+            )
+
+            scale_tasks[label] = scale_task
+            calc_tasks[label] = vasp_task
+            energy_tasks[label] = energy_task
+
+    else:
+        # ----------------------------------------------------------------
+        # Explicit calculations path (original behaviour)
+        # ----------------------------------------------------------------
+        calculations = stage['calculations']
+
+        for calc_label, calc_config in calculations.items():
+            # Per-calc structure override or stage-level
+            calc_structure = input_structure
+            if 'structure' in calc_config:
+                explicit = calc_config['structure']
+                calc_structure = orm.load_node(explicit) if isinstance(explicit, int) else explicit
+
+            # Deep-merge base_incar with per-calculation incar overrides
+            calc_incar_overrides = calc_config.get('incar', {})
+            if calc_incar_overrides:
+                merged_incar = deep_merge_dicts(base_incar, calc_incar_overrides)
+            else:
+                merged_incar = dict(base_incar)
+
+            # Per-calc kpoints or fall back to stage-level
+            calc_kpoints_mesh = calc_config.get('kpoints', stage_kpoints_mesh)
+            calc_kpoints_spacing = calc_config.get('kpoints_spacing', stage_kpoints_spacing)
+
+            # Per-calc retrieve or fall back to stage-level
+            calc_retrieve = calc_config.get('retrieve', stage_retrieve)
+
+            # Prepare builder inputs
+            builder_inputs = _prepare_builder_inputs(
+                incar=merged_incar,
+                kpoints_spacing=calc_kpoints_spacing,
+                potential_family=potential_family,
+                potential_mapping=potential_mapping,
+                options=options,
+                retrieve=calc_retrieve,
+                restart_folder=None,
+                clean_workdir=clean_workdir,
+                kpoints_mesh=calc_kpoints_mesh,
+            )
+
+            # Add VASP task
+            vasp_task_name = f'vasp_{stage_name}_{calc_label}'
+            vasp_task = wg.add_task(
+                VaspTask,
+                name=vasp_task_name,
+                structure=calc_structure,
+                code=code,
+                **builder_inputs
+            )
+
+            # Add energy extraction task
+            energy_task_name = f'energy_{stage_name}_{calc_label}'
+            energy_task = wg.add_task(
+                extract_total_energy,
+                name=energy_task_name,
+                energies=vasp_task.outputs.misc,
+                retrieved=vasp_task.outputs.retrieved,
+            )
+
+            calc_tasks[calc_label] = vasp_task
+            energy_tasks[calc_label] = energy_task
 
     return {
         'calc_tasks': calc_tasks,
         'energy_tasks': energy_tasks,
         'structure': input_structure,
+        'scale_tasks': scale_tasks,  # populated only when 'strains' is used
     }
 
 

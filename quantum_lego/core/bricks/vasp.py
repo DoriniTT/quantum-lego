@@ -156,7 +156,11 @@ def create_stage_tasks(
     from quantum_lego.core.common.aimd.tasks import create_supercell
     from ..workgraph import _prepare_builder_inputs
 
-    code = context['code']
+    # Allow per-stage code override via 'code_label' key
+    if 'code_label' in stage:
+        code = orm.load_code(stage['code_label'])
+    else:
+        code = context['code']
     potential_family = context['potential_family']
     potential_mapping = context['potential_mapping']
     options = context['options']
@@ -189,6 +193,8 @@ def create_stage_tasks(
             stage_structure = stage_tasks[prev_name]['structure']
         elif prev_stage_type in ('vasp', 'aimd'):
             stage_structure = stage_tasks[prev_name]['vasp'].outputs.structure
+        elif prev_stage_type == 'displace_atom':
+            stage_structure = stage_tasks[prev_name]['displace'].outputs.result
         elif prev_stage_type == 'dimer':
             # Use clean CONTCAR structure from the dimer stage
             stage_structure = stage_tasks[prev_name]['contcar_structure'].outputs.result

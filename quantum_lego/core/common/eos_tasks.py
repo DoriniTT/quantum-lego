@@ -244,3 +244,63 @@ def build_single_refined_structure(
     pmg = structure.get_pymatgen()
     pmg.scale_lattice(target_vol)
     return orm.StructureData(pymatgen=pmg)
+
+
+@task.calcfunction(outputs=['structure', 'volume'])
+def scale_structure_by_strain(
+    structure: orm.StructureData,
+    strain: orm.Float,
+) -> dict:
+    """Scale a structure isotropically by a linear strain.
+
+    The new volume is V_base * (1 + strain), equivalent to scaling each
+    lattice vector by (1 + strain)^(1/3).
+
+    Args:
+        structure: Base structure to scale.
+        strain: Linear strain (e.g. -0.06 for -6%).
+
+    Returns:
+        Dict with:
+            - 'structure': StructureData scaled to the new volume.
+            - 'volume': orm.Float with the new volume in Angstrom^3.
+    """
+    pmg = structure.get_pymatgen()
+    new_vol = pmg.volume * (1.0 + strain.value)
+    pmg.scale_lattice(new_vol)
+    return {
+        'structure': orm.StructureData(pymatgen=pmg),
+        'volume': orm.Float(new_vol),
+    }
+
+
+@task.calcfunction
+def gather_eos_data_dynamic(
+    labels: orm.List,
+    **kwargs: orm.Float,
+) -> orm.Dict:
+    """Gather volume-energy pairs where volumes come as individual sockets.
+
+    Expects kwargs with keys ``energy_<label>`` and ``vol_<label>`` for
+    each label in *labels*.
+
+    Args:
+        labels: List of calculation labels.
+        **kwargs: Individual orm.Float values keyed by ``energy_<label>``
+            and ``vol_<label>``.
+
+    Returns:
+        Dict with 'volumes', 'energies', and 'labels' lists sorted by volume.
+    """
+    label_list = labels.get_list()
+    pairs = []
+    for label in label_list:
+        energy = kwargs[f'energy_{label}'].value
+        vol = kwargs[f'vol_{label}'].value
+        pairs.append((float(vol), float(energy), label))
+    pairs.sort(key=lambda p: p[0])
+    return orm.Dict(dict={
+        'volumes': [p[0] for p in pairs],
+        'energies': [p[1] for p in pairs],
+        'labels': [p[2] for p in pairs],
+    })
